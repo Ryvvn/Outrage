@@ -1,0 +1,635 @@
+// Expansion System
+# AI Agent Prompt: Unity Tower Defense Map Expansion System Implementation
+
+## Context & Project Overview
+You are an expert Unity C# developer tasked with implementing a **dynamic map expansion system** for a 2D tilemap-based tower defense game with roguelike elements. The game uses Unity's Tilemap system, A* pathfinding, and follows a wave-based enemy spawning pattern similar to games like Kingdom Rush or Bloons TD.
+
+### Existing Architecture
+The game currently has these key systems:
+- **WaveManager**: Handles wave progression and enemy spawning
+- **LevelGenerator**: Creates initial tilemap layouts and pathfinding data
+- **EnemySpawner**: Spawns enemies along predetermined paths
+- **Tilemap-based terrain**: Uses Unity's Tilemap and TilemapRenderer
+- **Pathfinding**: Custom A* implementation with cached path data stored in `LevelPathData`
+
+## Core Requirements
+
+### 1. Expansion Trigger System
+**Implement a pause-based expansion selection system that activates after each wave completion:**
+
+```csharp
+// Required Events & Timing
+- Trigger: OnWaveCompleted event from WaveManager
+- Pause gameplay using Time.timeScale = 0
+- Display UI with 2-3 expansion options
+- Optional: 5-8 second decision timer
+- Resume gameplay after selection
+```
+
+**Key Components to Create:**
+- `ExpansionManager` singleton class
+- `ExpansionOption` data structure for different terrain types
+- UI system for option selection with visual previews
+- Integration with existing wave management flow
+
+### 2. Modular Terrain System
+**Design a chunk-based expansion system using these terrain archetypes:**
+
+**Canyon Path:**
+- Path length: +40% longer than baseline
+- Tower spaces: +25% more buildable tiles
+- Enemy movement: 15% slower due to winding routes
+- Risk level: Low
+- Strategic focus: Sniper and long-range tower builds
+
+**Swamp Terrain:**
+- Path length: -15% shorter than baseline
+- Tower spaces: -10% fewer buildable tiles  
+- Environmental effect: Damage-over-time zones affecting enemies
+- Risk level: Medium
+- Strategic focus: Area-of-effect specialists
+
+**Bridge Crossing:**
+- Path length: -25% shorter than baseline
+- Tower spaces: -30% fewer buildable tiles
+- Terrain feature: Narrow choke points with high traffic density
+- Risk level: High
+- Strategic focus: Burst DPS and crowd control
+
+**Forest Maze:**
+- Path length: Standard baseline
+- Tower spaces: Standard baseline
+- Terrain feature: Multiple branching paths with enemy concealment areas
+- Risk level: Medium-High
+- Strategic focus: Multi-path coverage and detection towers
+
+### 3. Technical Implementation Requirements
+
+**Tilemap Integration:**
+```csharp
+// Required functionality:
+- Use Tilemap.SetTilesBlock() for seamless chunk insertion
+- Implement edge detection and connection point matching
+- Create texture blending system for terrain seams
+- Support 8x8 or 16x16 tile chunk sizes
+- Maintain tilemap layer hierarchy (background, obstacles, decorations)
+```
+
+**Pathfinding System Updates:**
+```csharp
+// Required pathfinding modifications:
+- Extend existing A* implementation to handle dynamic map changes
+- Implement async path recalculation using Coroutines
+- Cache multiple path variations per expansion type
+- Support different enemy types (ground, flying, heavy units)
+- Update LevelPathData structure to handle expansion data
+```
+
+**Data Structures to Implement:**
+```csharp
+[System.Serializable]
+public class ExpansionChunk
+{
+    public string chunkName;
+    public TileBase[] tileData;          // 8x8 or 16x16 tile array
+    public Vector2Int chunkSize;
+    public List<Vector2Int> connectionPoints;
+    public List<Vector2Int> buildableAreas;
+    public TerrainEffect[] environmentalEffects;
+    public PathingModifier pathingData;
+}
+
+[System.Serializable] 
+public class ExpansionOption
+{
+    public string optionName;
+    public ExpansionChunk chunkPrefab;
+    public float pathLengthModifier;    // Multiplier for enemy travel time
+    public float buildSpaceModifier;    // Multiplier for available tower spots
+    public RiskLevel riskAssessment;
+    public Sprite previewImage;
+    public string strategicDescription;
+}
+```
+
+### 4. Strategic Depth Implementation
+
+**Scouting Information System:**
+- Display next wave composition before expansion choice
+- Show enemy resistances/vulnerabilities relevant to terrain options
+- Provide strategic hints: "Enemies with frost resistance incoming - ice terrain less effective"
+
+**Permanent Consequence Tracking:**
+- Create `ExpansionHistory` class to track player's expansion choices
+- Implement meta-progression that remembers choice patterns
+- Each expansion permanently locks out other options for that location
+- Store expansion history in persistent data for run analysis
+
+### 5. Performance & Optimization Requirements
+
+**Memory Management:**
+```csharp
+// Implement these optimization strategies:
+- Object pooling for tile chunks and pathfinding data
+- Async coroutines for pathfinding recalculation
+- Limit maximum expansions per run (3-5 total)
+- Use Unity's Job System for path calculations if possible
+- Implement LOD system for distant terrain details
+```
+
+**Edge Case Handling:**
+- Fallback system if expansion creates impossible enemy paths
+- Validation to ensure minimum 2 valid paths exist after any expansion
+- Error recovery for corrupted tilemap data
+- Graceful degradation if pathfinding calculation fails
+
+### 6. Visual Feedback System Requirements
+
+**Path Visualization:**
+- Animated path preview showing new enemy routes
+- Color-coded difficulty indicators (green=easy, red=dangerous)
+- Pulsing animation on newly available paths
+
+**UI/UX Components:**
+- Expansion option cards with terrain previews
+- Hover effects showing strategic implications
+- Build grid highlighting for new tower placement areas
+- Animated shader effects for environmental hazards
+
+**Terrain Effects:**
+- Particle systems for swamp DoT zones
+- Animated water shaders for bridge sections  
+- Fog-of-war effects for forest concealment areas
+- Dynamic lighting changes based on terrain type
+
+## Implementation Deliverables
+
+### Phase 1: Core System Architecture
+1. `ExpansionManager` singleton with event integration
+2. `ExpansionOption` and `ExpansionChunk` data structures
+3. Basic UI framework for option selection
+4. Integration hooks with existing `WaveManager`
+
+### Phase 2: Tilemap Integration
+1. Chunk loading and stitching system
+2. Connection point detection and matching
+3. Texture blending for seamless terrain transitions
+4. Buildable area calculation and validation
+
+### Phase 3: Pathfinding Updates
+1. Dynamic path recalculation system
+2. Multi-path support for different enemy types
+3. Performance optimization with async processing
+4. Integration with existing `LevelPathData` structure
+
+### Phase 4: Strategic Systems
+1. Scouting information display
+2. Risk-reward balancing implementation
+3. Permanent choice consequence tracking
+4. Meta-progression integration
+
+### Phase 5: Visual Polish & Testing
+1. Complete visual feedback system
+2. Environmental effect implementations
+3. Edge case handling and validation
+4. Performance testing and optimization
+
+## Code Quality Standards
+- Follow existing project naming conventions and architecture patterns
+- Include comprehensive XML documentation for all public methods
+- Implement proper event-driven architecture to avoid tight coupling
+- Use Unity's built-in systems (Coroutines, Events, ScriptableObjects) appropriately
+- Write unit tests for core pathfinding and expansion logic
+- Include debug visualization tools for development workflow
+
+## Success Criteria
+The implementation is successful when:
+1. Players can seamlessly expand the map after each wave without performance drops
+2. Each expansion choice creates meaningful strategic decisions
+3. The system integrates smoothly with existing wave management
+4. Visual feedback clearly communicates strategic implications
+5. The roguelike progression feels impactful across multiple runs
+6. No pathfinding errors or impossible game states occur
+
+## Additional Context
+This feature should enhance the game's strategic depth while maintaining the fast-paced tower defense gameplay. The expansion system should feel like a natural evolution of the battlefield rather than a disruptive interruption. Consider how this system might scale to support future features like boss encounters, special event waves, or player-requested terrain modifications.
+
+// Procedural Expansion
+# AI Agent Prompt: Unity Tower Defense Procedural Map Expansion System Implementation
+
+## Context & Project Overview
+You are an expert Unity C# developer tasked with implementing a **procedural map expansion system** for a 2D tilemap-based tower defense game with roguelike elements. The game uses Unity's Tilemap system, A* pathfinding, and follows a wave-based enemy spawning pattern similar to games like Kingdom Rush or Bloons TD.
+
+**Key Change from Original Design**: Instead of using pre-designed static chunks, you will implement a **tile palette-based procedural generation system** that creates unique expansion chunks on-demand using Minecraft-style generation rules.
+
+### Existing Architecture
+The game currently has these key systems:
+- **WaveManager**: Handles wave progression and enemy spawning
+- **LevelGenerator**: Creates initial tilemap layouts and pathfinding data
+- **EnemySpawner**: Spawns enemies along predetermined paths
+- **Tilemap-based terrain**: Uses Unity's Tilemap and TilemapRenderer
+- **Pathfinding**: Custom A* implementation with cached path data stored in `LevelPathData`
+
+## Core Requirements
+
+### 1. Procedural Generation System Architecture
+
+**Replace static chunk storage with dynamic tile palette generation:**
+
+```csharp
+// New Data Structure - Tile Palette Based
+[System.Serializable]
+public class TilePalette
+{
+    public string paletteName;
+    public TileBase[] backgroundTiles;      // Ground/base terrain options
+    public TileBase[] obstacleTiles;        // Blocking/decoration tiles
+    public TileBase[] pathTiles;            // Walkable route tiles
+    public TileBase[] decorativeTiles;      // Optional visual elements
+    public BiomeWeights tileWeights;        // Probability weights for each tile type
+}
+
+[System.Serializable]
+public class BiomeGenerationRules
+{
+    public string biomeName;
+    public TilePalette tilePalette;
+    
+    // Density Controls
+    [Range(0f, 1f)] public float obstacleDensity;
+    [Range(0f, 1f)] public float decorativeDensity;
+    
+    // Pattern Controls
+    public PathPatternType pathPattern;     // Winding, Straight, Branching, Maze
+    public ClusteringRule obstacleCluster;  // Scattered, Clustered, Linear
+    public int pathBranchCount;             // Number of route variations
+    
+    // Noise Parameters
+    public float noiseScale;
+    public float noiseThreshold;
+    public Vector2 noiseOffset;
+}
+
+[System.Serializable]
+public class ProceduralExpansionChunk
+{
+    public string chunkName;
+    public Vector2Int chunkSize;            // 8x8 or 16x16
+    public BiomeGenerationRules biomeRules;
+    public List<Vector2Int> connectionPoints;
+    public TerrainEffect[] environmentalEffects;
+    public PathingModifier pathingData;
+    
+    // Generated at runtime
+    [System.NonSerialized] public TileBase[] generatedTileData;
+    [System.NonSerialized] public List<Vector2Int> generatedBuildableAreas;
+}
+```
+
+### 2. Minecraft-Style Generation Pipeline
+
+**Implement a layered generation system with these phases:**
+
+**Phase 1: Base Terrain Generation**
+```csharp
+public class TerrainGenerator
+{
+    public TileBase[] GenerateBaseTerrain(BiomeGenerationRules rules, int seed)
+    {
+        // Use Perlin noise for natural variation
+        // Apply biome-specific tile weights
+        // Ensure seamless edge blending
+    }
+}
+```
+
+**Phase 2: Path Network Generation**
+```csharp
+public class PathGenerator
+{
+    public List<Vector2Int> GeneratePathNetwork(BiomeGenerationRules rules, 
+        List<Vector2Int> connectionPoints, int seed)
+    {
+        // Create main path connecting required points
+        // Add branch paths based on pathBranchCount
+        // Apply path pattern type (winding, straight, etc.)
+        // Validate connectivity with A* pathfinding
+    }
+}
+```
+
+**Phase 3: Obstacle Placement**
+```csharp
+public class ObstacleGenerator
+{
+    public void PlaceObstacles(TileBase[] terrainGrid, BiomeGenerationRules rules, 
+        List<Vector2Int> pathTiles, int seed)
+    {
+        // Apply obstacle density rules
+        // Follow clustering patterns
+        // Avoid blocking critical paths
+        // Maintain strategic chokepoints
+    }
+}
+```
+
+**Phase 4: Decorative Elements**
+```csharp
+public class DecorativeGenerator
+{
+    public void AddDecorativeElements(TileBase[] terrainGrid, BiomeGenerationRules rules, int seed)
+    {
+        // Place visual enhancement tiles
+        // Follow biome aesthetic rules
+        // Ensure no gameplay impact
+    }
+}
+```
+
+### 3. Biome-Specific Generation Rules
+
+**Canyon Biome:**
+```csharp
+BiomeGenerationRules canyonRules = new BiomeGenerationRules
+{
+    biomeName = "Canyon",
+    obstacleDensity = 0.7f,         // High rock density
+    pathPattern = PathPatternType.Winding,
+    obstacleCluster = ClusteringRule.Linear,
+    pathBranchCount = 1,
+    noiseScale = 0.3f,
+    noiseThreshold = 0.6f
+};
+```
+
+**Swamp Biome:**
+```csharp
+BiomeGenerationRules swampRules = new BiomeGenerationRules
+{
+    biomeName = "Swamp",
+    obstacleDensity = 0.4f,         // Scattered water patches
+    pathPattern = PathPatternType.Organic,
+    obstacleCluster = ClusteringRule.Scattered,
+    pathBranchCount = 2,
+    noiseScale = 0.5f,
+    noiseThreshold = 0.4f
+};
+```
+
+**Bridge Biome:**
+```csharp
+BiomeGenerationRules bridgeRules = new BiomeGenerationRules
+{
+    biomeName = "Bridge",
+    obstacleDensity = 0.1f,         // Minimal obstacles
+    pathPattern = PathPatternType.Straight,
+    obstacleCluster = ClusteringRule.None,
+    pathBranchCount = 0,
+    noiseScale = 0.1f,
+    noiseThreshold = 0.8f
+};
+```
+
+**Forest Biome:**
+```csharp
+BiomeGenerationRules forestRules = new BiomeGenerationRules
+{
+    biomeName = "Forest",
+    obstacleDensity = 0.6f,         // Clustered trees
+    pathPattern = PathPatternType.Branching,
+    obstacleCluster = ClusteringRule.Clustered,
+    pathBranchCount = 3,
+    noiseScale = 0.4f,
+    noiseThreshold = 0.5f
+};
+```
+
+### 4. Procedural Generation Manager
+
+**Create a centralized system to orchestrate chunk generation:**
+
+```csharp
+public class ProceduralChunkGenerator : MonoBehaviour
+{
+    [Header("Generation Settings")]
+    public List<BiomeGenerationRules> availableBiomes;
+    public int globalSeed;
+    public Vector2Int standardChunkSize = new Vector2Int(16, 16);
+    
+    [Header("Validation Settings")]
+    public int maxGenerationAttempts = 5;
+    public float minPathConnectivity = 0.8f;
+    public int requiredBuildableSpaces = 10;
+    
+    public ProceduralExpansionChunk GenerateChunk(BiomeGenerationRules rules, 
+        List<Vector2Int> connectionPoints, int expansionIndex)
+    {
+        int chunkSeed = globalSeed + expansionIndex;
+        
+        for (int attempt = 0; attempt < maxGenerationAttempts; attempt++)
+        {
+            var chunk = GenerateChunkAttempt(rules, connectionPoints, chunkSeed + attempt);
+            
+            if (ValidateChunk(chunk))
+            {
+                return chunk;
+            }
+        }
+        
+        // Fallback to simpler generation rules
+        return GenerateFallbackChunk(rules, connectionPoints, chunkSeed);
+    }
+    
+    private ProceduralExpansionChunk GenerateChunkAttempt(BiomeGenerationRules rules, 
+        List<Vector2Int> connectionPoints, int seed)
+    {
+        // Phase 1: Base terrain
+        var terrainData = terrainGenerator.GenerateBaseTerrain(rules, seed);
+        
+        // Phase 2: Path network
+        var pathData = pathGenerator.GeneratePathNetwork(rules, connectionPoints, seed);
+        
+        // Phase 3: Obstacles
+        obstacleGenerator.PlaceObstacles(terrainData, rules, pathData, seed);
+        
+        // Phase 4: Decoratives
+        decorativeGenerator.AddDecorativeElements(terrainData, rules, seed);
+        
+        return CreateChunkFromData(terrainData, pathData, rules);
+    }
+    
+    private bool ValidateChunk(ProceduralExpansionChunk chunk)
+    {
+        // Validate path connectivity
+        if (!pathfindingValidator.ValidateConnectivity(chunk.generatedTileData, chunk.connectionPoints))
+            return false;
+            
+        // Validate buildable spaces
+        if (chunk.generatedBuildableAreas.Count < requiredBuildableSpaces)
+            return false;
+            
+        // Validate strategic balance
+        if (!strategyValidator.ValidateStrategicBalance(chunk))
+            return false;
+            
+        return true;
+    }
+}
+```
+
+### 5. Integration with Existing Expansion System
+
+**Modify your existing ExpansionManager to use procedural generation:**
+
+```csharp
+public class ExpansionManager : MonoBehaviour
+{
+    [Header("Procedural Generation")]
+    public ProceduralChunkGenerator chunkGenerator;
+    public List<BiomeGenerationRules> availableBiomes;
+    
+    private void OnWaveCompleted()
+    {
+        // Generate 2-3 random biome options
+        var expansionOptions = GenerateExpansionOptions();
+        
+        // Show UI for player selection
+        expansionUI.ShowOptions(expansionOptions);
+        
+        // Pause game
+        Time.timeScale = 0f;
+    }
+    
+    private List<ExpansionOption> GenerateExpansionOptions()
+    {
+        var options = new List<ExpansionOption>();
+        var selectedBiomes = SelectRandomBiomes(3);
+        
+        foreach (var biome in selectedBiomes)
+        {
+            var connectionPoints = CalculateConnectionPoints();
+            var proceduralChunk = chunkGenerator.GenerateChunk(biome, connectionPoints, currentExpansionCount);
+            
+            var option = new ExpansionOption
+            {
+                optionName = biome.biomeName,
+                proceduralChunk = proceduralChunk,
+                pathLengthModifier = CalculatePathLength(proceduralChunk),
+                buildSpaceModifier = CalculateBuildSpaces(proceduralChunk),
+                riskAssessment = CalculateRisk(proceduralChunk),
+                previewImage = GeneratePreviewImage(proceduralChunk),
+                strategicDescription = GenerateDescription(proceduralChunk)
+            };
+            
+            options.Add(option);
+        }
+        
+        return options;
+    }
+}
+```
+
+### 6. Performance Optimization Requirements
+
+**Implement efficient generation and caching:**
+
+```csharp
+// Generation Performance
+- Use Unity's Job System for noise calculation
+- Implement object pooling for tile arrays
+- Cache generated chunks during current run
+- Use async/await for generation when possible
+- Limit generation time to <100ms per chunk
+
+// Memory Management
+- Dispose of unused chunk data after integration
+- Use NativeArrays for large tile calculations
+- Implement progressive generation for large chunks
+- Clear generation caches between runs
+```
+
+### 7. Visual Feedback System
+
+**Provide real-time preview of generated chunks:**
+
+```csharp
+public class ChunkPreviewRenderer : MonoBehaviour
+{
+    public void RenderChunkPreview(ProceduralExpansionChunk chunk)
+    {
+        // Create miniature tilemap preview
+        // Highlight path routes with colored overlays
+        // Show buildable areas with grid indicators
+        // Display environmental effects with particle previews
+    }
+}
+```
+
+### 8. Testing and Validation Framework
+
+**Create tools to validate procedural generation quality:**
+
+```csharp
+public class GenerationValidator : MonoBehaviour
+{
+    [Header("Validation Metrics")]
+    public int testGenerationCount = 100;
+    public float requiredPassRate = 0.85f;
+    
+    public void RunGenerationTests()
+    {
+        // Test each biome type extensively
+        // Validate connectivity success rates
+        // Check strategic balance distribution
+        // Measure generation performance
+        // Report any edge cases or failures
+    }
+}
+```
+
+## Implementation Deliverables
+
+### Phase 1: Core Procedural Architecture
+1. `TilePalette` and `BiomeGenerationRules` data structures
+2. `ProceduralChunkGenerator` with layered generation pipeline
+3. Basic terrain, path, and obstacle generators
+4. Seed-based deterministic generation system
+
+### Phase 2: Biome-Specific Rules
+1. Four biome rule sets (Canyon, Swamp, Bridge, Forest)
+2. Pattern-based generation algorithms
+3. Noise-based natural variation
+4. Connectivity validation system
+
+### Phase 3: Integration & Optimization
+1. Modified `ExpansionManager` with procedural support
+2. Performance optimization with Job System
+3. Memory management and caching
+4. Chunk validation and fallback systems
+
+### Phase 4: Visual & Polish
+1. Real-time chunk preview system
+2. Strategic information display
+3. Visual feedback for generated content
+4. Testing and validation framework
+
+## Success Criteria
+The procedural expansion system is successful when:
+1. Each expansion feels unique while maintaining strategic balance
+2. Generation completes within 100ms per chunk
+3. 95%+ of generated chunks pass connectivity validation
+4. Players can distinguish between different biome types
+5. No repeated identical chunks occur within a single run
+6. System integrates seamlessly with existing wave management
+7. Procedural chunks maintain same strategic depth as designed content
+
+## Technical Constraints
+- Maintain compatibility with existing tilemap system
+- Ensure deterministic generation for replay/debugging
+- Support chunk sizes of 8x8 to 16x16 tiles
+- Generate chunks that blend seamlessly with existing map
+- Provide fallback generation for edge cases
+- Maintain 60fps performance during generation
+
+This procedural approach transforms your expansion system from a static content library into a dynamic generation engine, dramatically increasing replayability while maintaining the strategic depth of your tower defense gameplay.
+
