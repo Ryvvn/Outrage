@@ -1,14 +1,8 @@
-// Assets/Scripts/Core/GameManager.cs
+// Scripts/Core/GameManager.cs
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public enum GameState
-{
-    Build,
-    WaveInProgress,
-    GameOver,
-    Victory
-}
+public enum GameState { Build, WaveInProgress, Pause, GameOver, Victory }
 
 public class GameManager : MonoBehaviour
 {
@@ -16,110 +10,143 @@ public class GameManager : MonoBehaviour
 
     [Header("Game State")]
     public GameState currentState;
+    private GameState stateBeforePause;
 
     [Header("Player Stats")]
-    public int playerHealth = 20;
     public int playerMoney = 100;
 
     [Header("Dependencies")]
     public WaveManager waveManager;
     public ChoiceManager choiceManager;
     public UIManager uiManager;
+    public HealthSystem baseHealthSystem;
+
+    [Header("World Center Setup")]
+    public PlayerController player;
+    public WorldStreamer worldStreamer;
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
     }
 
     void Start()
     {
-        // Subscribe to events
-        waveManager.OnWaveCompleted += HandleWaveCompleted;
+        // --- CORRECTED LOGIC TO CENTER THE PLAYER AND BASE ---
+        if (worldStreamer != null && worldStreamer.chunkGenerator != null && player != null && baseHealthSystem != null)
+        {
+            // Get the REAL cell size from the generator
+            Vector3 cellSize = worldStreamer.chunkGenerator.cellSize;
 
-        // Start the game in the build phase
+            // Calculate the total world size in world units
+            float worldWidth = worldStreamer.worldSizeInChunks.x * worldStreamer.chunkGenerator.chunkSize.x * cellSize.x;
+            float worldHeight = worldStreamer.worldSizeInChunks.y * worldStreamer.chunkGenerator.chunkSize.y * cellSize.y;
+
+            // The center is half the total world size
+            Vector3 worldCenter = new Vector3(worldWidth / 2.0f, worldHeight / 2.0f, 0);
+
+            player.transform.position = worldCenter;
+            baseHealthSystem.transform.position = worldCenter;
+
+            Debug.Log($"World Center calculated at: {worldCenter}. Player and Base moved.");
+        }
+        // --- END OF CORRECTED LOGIC ---
+
+        if (baseHealthSystem == null)
+        {
+            Debug.LogError("GameManager: BaseHealthSystem is not assigned! Game Over condition will not work.");
+        }
+        else
+        {
+            baseHealthSystem.OnDied += HandleGameOver;
+        }
+
+        waveManager.OnWaveCompleted += HandleWaveCompleted;
         ChangeState(GameState.Build);
+    }
+
+    // ... (rest of the script is identical)
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
     }
 
     void OnDestroy()
     {
-        // Unsubscribe from events
-        if (waveManager != null)
-        {
-            waveManager.OnWaveCompleted -= HandleWaveCompleted;
-        }
+        if (waveManager != null) waveManager.OnWaveCompleted -= HandleWaveCompleted;
+        if (baseHealthSystem != null) baseHealthSystem.OnDied -= HandleGameOver;
     }
 
     public void ChangeState(GameState newState)
     {
+        if (currentState == newState) return;
         currentState = newState;
         switch (currentState)
         {
             case GameState.Build:
-                Debug.Log("Entering Build Phase. Ready for next wave.");
+                Time.timeScale = 1f;
+                uiManager.UpdatePlayerStats();
                 uiManager.ShowStartWaveButton(true);
+                uiManager.SetPausePanelActive(false);
                 break;
             case GameState.WaveInProgress:
                 uiManager.ShowStartWaveButton(false);
-                waveManager.StartNextWave();
+                break;
+            case GameState.Pause:
+                stateBeforePause = currentState;
+                Time.timeScale = 0f;
+                uiManager.SetPausePanelActive(true);
                 break;
             case GameState.GameOver:
-                Debug.Log("Game Over!");
-                Time.timeScale = 0; // Pause game
+                Time.timeScale = 0f;
                 uiManager.ShowGameOverPanel();
                 break;
             case GameState.Victory:
-                Debug.Log("Victory!");
+                Time.timeScale = 0f;
                 uiManager.ShowVictoryPanel();
                 break;
         }
     }
 
+    public void TogglePause()
+    {
+        if (currentState != GameState.Pause && currentState != GameState.GameOver && currentState != GameState.Victory)
+        {
+            stateBeforePause = currentState;
+            ChangeState(GameState.Pause);
+        }
+        else if (currentState == GameState.Pause)
+        {
+            ResumeGame();
+        }
+    }
+
+    public void ResumeGame()
+    {
+        if (currentState == GameState.Pause) ChangeState(stateBeforePause);
+    }
+
     public void StartWave()
     {
-        if (currentState == GameState.Build)
-        {
-            ChangeState(GameState.WaveInProgress);
-        }
+        if (currentState == GameState.Build) ChangeState(GameState.WaveInProgress);
     }
 
     private void HandleWaveCompleted(int waveNumber)
     {
-        // Check for victory condition
         if (waveManager.IsLastWave())
         {
             ChangeState(GameState.Victory);
             return;
         }
-
-        // Award money for completing the wave
         playerMoney += 100 + (waveNumber * 10);
-        uiManager.UpdatePlayerStats();
-
-        // Trigger the upgrade choice system
-        if (waveNumber % choiceManager.wavesPerUpgradeChoice == 0)
-        {
-            choiceManager.TriggerUpgradeChoice();
-        }
-
         ChangeState(GameState.Build);
     }
 
-    public void TakeDamage(int amount)
+    private void HandleGameOver()
     {
-        playerHealth -= amount;
-        uiManager.UpdatePlayerStats();
-        if (playerHealth <= 0)
-        {
-            playerHealth = 0;
-            ChangeState(GameState.GameOver);
-        }
+        ChangeState(GameState.GameOver);
     }
 
     public void AddMoney(int amount)

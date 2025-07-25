@@ -1,13 +1,13 @@
-
+// Scripts/Spawning/EnemySpawner.cs
 using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
 /// Manages object pools for enemies to improve performance by reusing GameObjects.
+/// Acts as a Singleton for easy global access.
 /// </summary>
 public class EnemySpawner : MonoBehaviour
 {
-    // Singleton instance for easy access.
     public static EnemySpawner Instance { get; private set; }
 
     [Tooltip("Parent transform for pooled objects to keep the hierarchy clean.")]
@@ -17,7 +17,6 @@ public class EnemySpawner : MonoBehaviour
 
     void Awake()
     {
-        // Setup Singleton pattern.
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -31,62 +30,91 @@ public class EnemySpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// Spawns an enemy from the pool or creates a new one if the pool is empty.
-    /// It then assigns the necessary path data.
+    /// Creates a new object pool for a given prefab.
     /// </summary>
-    public void SpawnEnemy(GameObject enemyPrefab, List<Vector3> path)
+    /// <param name="prefab">The enemy prefab to pool.</param>
+    /// <param name="initialSize">The number of enemies to pre-instantiate.</param>
+    public void CreatePool(GameObject prefab, int initialSize)
     {
+        if (prefab == null) return;
+        string poolKey = prefab.name;
+
+        if (poolDictionary.ContainsKey(poolKey)) return;
+
+        poolDictionary[poolKey] = new Queue<GameObject>();
+        for (int i = 0; i < initialSize; i++)
+        {
+            GameObject obj = Instantiate(prefab, poolParent);
+            obj.name = poolKey; // Ensure consistent naming for re-pooling
+            obj.SetActive(false);
+            poolDictionary[poolKey].Enqueue(obj);
+        }
+    }
+
+    /// <summary>
+    /// Spawns an enemy from the pool at a specific position.
+    /// This is the primary method used by the new perimeter spawning system.
+    /// </summary>
+    /// <param name="enemyPrefab">The prefab of the enemy to spawn.</param>
+    /// <param name="position">The world position to spawn the enemy at.</param>
+    public void SpawnEnemy(GameObject enemyPrefab, Vector3 position)
+    {
+        if (enemyPrefab == null)
+        {
+            Debug.LogError("SpawnEnemy was called with a null prefab.");
+            return;
+        }
+
         string poolKey = enemyPrefab.name;
 
-        // Ensure a pool for this prefab exists.
+        // Ensure a pool for this prefab exists. If not, create a small one.
         if (!poolDictionary.ContainsKey(poolKey))
         {
-            poolDictionary[poolKey] = new Queue<GameObject>();
+            Debug.LogWarning($"Pool for {poolKey} not found. Creating a new one on-the-fly.");
+            CreatePool(enemyPrefab, 5);
         }
 
+        Queue<GameObject> queue = poolDictionary[poolKey];
         GameObject enemyToSpawn;
 
-        // If the pool has an inactive object, reuse it.
-        if (poolDictionary[poolKey].Count > 0)
-        {
-            enemyToSpawn = poolDictionary[poolKey].Dequeue();
-        }
-        else // Otherwise, create a new one.
+        // If the pool is empty, instantiate a new object and add it to the pool.
+        if (queue.Count == 0)
         {
             enemyToSpawn = Instantiate(enemyPrefab, poolParent);
-            enemyToSpawn.name = poolKey; // To keep names consistent.
+            enemyToSpawn.name = poolKey;
         }
-
-        // Setup the enemy's components.
-        enemyToSpawn.transform.position = path[0];
-
-        EnemyMovement movement = enemyToSpawn.GetComponent<EnemyMovement>();
-        if (movement != null)
+        else // Otherwise, reuse an existing object.
         {
-            movement.SetPath(path);
+            enemyToSpawn = queue.Dequeue();
         }
 
-        // Activate the enemy and make it visible.
+        // ** CRITICAL STEP **: Set position and rotation *before* activating the object.
+        // This prevents OnEnable() from running at the wrong spot and avoids extra physics calculations.
+        enemyToSpawn.transform.position = position;
+        enemyToSpawn.transform.rotation = Quaternion.identity;
         enemyToSpawn.SetActive(true);
     }
 
     /// <summary>
     /// Returns an enemy to its corresponding pool.
     /// </summary>
+    /// <param name="enemy">The GameObject of the enemy to return.</param>
     public void ReturnEnemyToPool(GameObject enemy)
     {
+        if (enemy == null) return;
+
         string poolKey = enemy.name;
 
         // Deactivate the object and add it back to the queue.
         enemy.SetActive(false);
 
-        // Ensure the pool exists before trying to enqueue.
         if (poolDictionary.ContainsKey(poolKey))
         {
             poolDictionary[poolKey].Enqueue(enemy);
         }
         else
         {
+            // If the pool somehow doesn't exist, just destroy the object to prevent errors.
             Debug.LogWarning($"Pool with key '{poolKey}' does not exist. Destroying object instead.");
             Destroy(enemy);
         }

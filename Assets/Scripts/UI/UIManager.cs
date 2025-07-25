@@ -16,6 +16,7 @@ public class UIManager : MonoBehaviour
     [Header("Panels")]
     public GameObject gameOverPanel;
     public GameObject victoryPanel;
+    public GameObject pausePanel;
 
     void Start()
     {
@@ -24,14 +25,21 @@ public class UIManager : MonoBehaviour
             startWaveButton.onClick.AddListener(GameManager.Instance.StartWave);
         }
 
-        //gameOverPanel.SetActive(false);
-        //victoryPanel.SetActive(false);
+        // Ensure all panels are hidden at the start of the game.
+        if (gameOverPanel != null) gameOverPanel.SetActive(false);
+        if (victoryPanel != null) victoryPanel.SetActive(false);
+        if (pausePanel != null) pausePanel.SetActive(false);
+
         UpdatePlayerStats();
     }
 
     public void UpdatePlayerStats()
     {
-        healthText.text = $"Health: {GameManager.Instance.playerHealth}";
+        // Source health directly from the base's HealthSystem via the GameManager.
+        if (GameManager.Instance.baseHealthSystem != null)
+        {
+            healthText.text = $"Health: {GameManager.Instance.baseHealthSystem.CurrentHealth}";
+        }
         moneyText.text = $"Money: ${GameManager.Instance.playerMoney}";
         waveText.text = $"Wave: {GameManager.Instance.waveManager.currentWaveIndex + 1} / {GameManager.Instance.waveManager.waves.Count}";
     }
@@ -44,13 +52,21 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    public void SetPausePanelActive(bool isActive)
+    {
+        if (pausePanel != null)
+        {
+            pausePanel.SetActive(isActive);
+        }
+    }
+
     public void ShowGameOverPanel()
     {
-        gameOverPanel.SetActive(true);
+        if (gameOverPanel != null) gameOverPanel.SetActive(true);
     }
 
     public void ShowVictoryPanel()
     {
-        victoryPanel.SetActive(true);
+        if (victoryPanel != null) victoryPanel.SetActive(true);
     }
 }

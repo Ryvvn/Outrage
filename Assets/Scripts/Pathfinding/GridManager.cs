@@ -1,144 +1,91 @@
 // Scripts/Pathfinding/GridManager.cs
 using UnityEngine;
-using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 
+/// <summary>
+/// Creates and manages the pathfinding grid for the entire finite world.
+/// The grid's walkability is now updated by the world generator.
+/// </summary>
 public class GridManager : MonoBehaviour
 {
-    public Tilemap baseTilemap;
-    public Tilemap obstacleTilemap;
-    private Grid unityGrid;
-    private PathNode[,] nodes;
-    private BoundsInt tilemapBounds;
+    public static GridManager Instance { get; private set; }
 
+    [Header("World Setup")]
+    [Tooltip("The total size of the world in tiles (e.g., 200x200).")]
+    [SerializeField] private Vector2Int worldSize = new Vector2Int(200, 200);
+    [Tooltip("The physical size of each cell in the grid.")]
+    [SerializeField] private Vector3 cellSize = Vector3.one;
+    [Tooltip("The world-space position corresponding to the grid's bottom-left corner.")]
+    [SerializeField] private Vector3 worldOriginPosition = new Vector3(-100, -100, 0);
+
+    private PathNode[,] nodes;
     public int GridSizeX { get; private set; }
     public int GridSizeY { get; private set; }
 
-    public static GridManager Instance { get; private set; }
+    // Public accessor for cell size for other systems
+    public Vector3 CellSize => cellSize;
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance == null) { Instance = this; }
+        else { Destroy(gameObject); return; }
 
-        if (baseTilemap == null || obstacleTilemap == null)
-        {
-            Debug.LogError("GridManager is missing one or more tilemap references!");
-            return;
-        }
-        unityGrid = baseTilemap.layoutGrid;
-        CreateGrid();
+        // Create the grid structure on Awake to ensure it's ready for other services.
+        CreateGridStructure();
     }
 
     /// <summary>
-    /// Expands the pathfinding grid to encompass new map areas.
+    /// Creates the grid data structure with all nodes initially set to unwalkable.
+    /// The actual walkability will be set by the world generator.
     /// </summary>
-    public void ExpandGrid()
+    public void CreateGridStructure()
     {
-        Debug.Log("Expanding grid...");
-        PathNode[,] oldNodes = nodes;
-        BoundsInt oldBounds = tilemapBounds;
-
-        // Recalculate the totals bounds of the map 
-        baseTilemap.CompressBounds();
-        tilemapBounds = baseTilemap.cellBounds;
-
-        GridSizeX = tilemapBounds.size.x;
-        GridSizeY = tilemapBounds.size.y;
-        nodes = new PathNode[GridSizeX, GridSizeY];
-
-        // Calculate the offset of the old grid within the new, larger grid
-        Vector3Int offset = oldBounds.min - tilemapBounds.min;
-
-        // Iterate through the new and larger grid space
-        for(int x = 0; x < GridSizeX; x++)
-        {
-            for (int y = 0; y < GridSizeY; y++)
-            {
-                // Check if this position corresponds to a node from the old grid
-                int oldX = x - offset.x;
-                int oldY = y - offset.y;
-
-                if(oldX >= 0 && oldX < oldBounds.size.x && oldY >= 0 && oldY < oldBounds.size.y)
-                {
-                    // This was part of the old grid, copy the node over
-                    nodes[x, y] = oldNodes[oldX, oldY];
-                    nodes[x, y].gridX = x; // Update grid coordinates
-                    nodes[x, y].gridY = y;
-                }
-                else
-                {
-                    // This is a new node in the expansion area, create it
-                    Vector3Int tilemapCellPos = new Vector3Int(tilemapBounds.xMin + x, tilemapBounds.yMin + y, tilemapBounds.position.z);
-                    nodes[x, y] = CreateNodeAt(tilemapCellPos, x, y);
-                }
-            }
-        }
-        Debug.Log($"Grid expanded to size {GridSizeX}x{GridSizeY}. New MinBounds: ({tilemapBounds.xMin}, {tilemapBounds.yMin})");
-    }
-
-    private PathNode CreateNodeAt(Vector3Int cellPos, int gridX, int gridY)
-    {
-        Vector3 worldPoint = unityGrid.GetCellCenterWorld(cellPos);
-        // A node is walkable if it's on the base tilemap AND NOT on the obstacle tilemap
-        bool isBaseTile = baseTilemap.HasTile(cellPos);
-        bool isObstacleTile = obstacleTilemap.HasTile(cellPos);
-        return new PathNode(isBaseTile && !isObstacleTile, worldPoint, gridX, gridY);
-    }
-
-
-
-    public void CreateGrid()
-    {
-        baseTilemap.CompressBounds();
-        tilemapBounds = baseTilemap.cellBounds;
-
-        GridSizeX = tilemapBounds.size.x;
-        GridSizeY = tilemapBounds.size.y;
+        GridSizeX = worldSize.x;
+        GridSizeY = worldSize.y;
         nodes = new PathNode[GridSizeX, GridSizeY];
 
         for (int x = 0; x < GridSizeX; x++)
         {
             for (int y = 0; y < GridSizeY; y++)
             {
-                Vector3Int tilemapCellPos = new Vector3Int(tilemapBounds.xMin + x, tilemapBounds.yMin + y, tilemapBounds.position.z);
-                Vector3 worldPoint = unityGrid.GetCellCenterWorld(tilemapCellPos);
-                bool walkable = baseTilemap.HasTile(tilemapCellPos);
-
-                nodes[x, y] = new PathNode(walkable, worldPoint, x, y);
+                Vector3 worldPoint = worldOriginPosition + new Vector3(x * cellSize.x + cellSize.x / 2, y * cellSize.y + cellSize.y / 2, 0);
+                // All nodes start as unwalkable until a generator explicitly makes them walkable.
+                nodes[x, y] = new PathNode(false, worldPoint, x, y);
             }
         }
-        Debug.Log($"Grid created with size: {GridSizeX}x{GridSizeY}. MinBounds: ({tilemapBounds.xMin}, {tilemapBounds.yMin})");
+        Debug.Log($"Grid structure created with size: {GridSizeX}x{GridSizeY}. Awaiting generation data.");
     }
 
-    public List<PathNode> GetAllNodes()
+    /// <summary>
+    /// Updates the walkability of a specific node. Called by world generators.
+    /// </summary>
+    public void UpdateNodeWalkability(Vector3 worldPosition, bool isWalkable)
     {
-        List<PathNode> allNodes = new List<PathNode>();
-        if (nodes == null) return allNodes;
-
-        for (int x = 0; x < GridSizeX; x++)
-        {
-            for (int y = 0; y < GridSizeY; y++)
-            {
-                allNodes.Add(nodes[x, y]);
-            }
-        }
-        return allNodes;
-    }
-
-    public void UpdateNodeWalkability(PathNode node, bool isWalkable)
-    {
+        PathNode node = GetNodeFromWorldPoint(worldPosition);
         if (node != null)
         {
             node.isWalkable = isWalkable;
         }
+    }
+
+    public PathNode GetNodeFromWorldPoint(Vector3 worldPosition)
+    {
+        if (nodes == null) return null;
+
+        float percentX = (worldPosition.x - worldOriginPosition.x) / (GridSizeX * cellSize.x);
+        float percentY = (worldPosition.y - worldOriginPosition.y) / (GridSizeY * cellSize.y);
+
+        percentX = Mathf.Clamp01(percentX);
+        percentY = Mathf.Clamp01(percentY);
+
+        int x = Mathf.FloorToInt((GridSizeX) * percentX);
+        int y = Mathf.FloorToInt((GridSizeY) * percentY);
+
+        // Boundary check
+        x = Mathf.Clamp(x, 0, GridSizeX - 1);
+        y = Mathf.Clamp(y, 0, GridSizeY - 1);
+
+        return nodes[x, y];
     }
 
     public PathNode GetNode(int x, int y)
@@ -150,21 +97,6 @@ public class GridManager : MonoBehaviour
         return null;
     }
 
-    public Vector3Int WorldToCell(Vector3 worldPosition)
-    {
-        return unityGrid.WorldToCell(worldPosition);
-    }
-
-    public PathNode GetNodeFromWorldPoint(Vector3 worldPosition)
-    {
-        if (nodes == null || unityGrid == null) return null;
-        Vector3Int cellPosition = unityGrid.WorldToCell(worldPosition);
-        int x = cellPosition.x - tilemapBounds.xMin;
-        int y = cellPosition.y - tilemapBounds.yMin;
-
-        return GetNode(x, y);
-    }
-
     public List<PathNode> GetNeighbours(PathNode node)
     {
         List<PathNode> neighbours = new List<PathNode>();
@@ -173,9 +105,6 @@ public class GridManager : MonoBehaviour
             for (int y = -1; y <= 1; y++)
             {
                 if (x == 0 && y == 0) continue;
-
-                // Enforce 4-directional movement (no diagonals) for clearer turns.
-                if (Mathf.Abs(x) == Mathf.Abs(y)) continue;
 
                 int checkX = node.gridX + x;
                 int checkY = node.gridY + y;
@@ -190,32 +119,12 @@ public class GridManager : MonoBehaviour
         return neighbours;
     }
 
-    void OnDrawGizmos()
-    {
-        if (nodes != null)
-        {
-            float nodeDiameter = unityGrid != null ? unityGrid.cellSize.x * 0.1f : 0.5f;
-            foreach (PathNode n in nodes)
-            {
-                Gizmos.color = (n.isWalkable) ? Color.white : Color.red;
-                if (Pathfinder.Instance != null && Pathfinder.Instance.FinalPath != null && Pathfinder.Instance.FinalPath.Contains(n))
-                {
-                    Gizmos.color = Color.black;
-                }
-                Gizmos.DrawCube(n.worldPosition, Vector3.one * nodeDiameter);
-            }
-        }
-    }
-
     public void ResetAllNodeCosts()
     {
         if (nodes == null) return;
-        for (int x = 0; x < GridSizeX; x++)
+        foreach (PathNode node in nodes)
         {
-            for (int y = 0; y < GridSizeY; y++)
-            {
-                nodes[x, y].ResetCosts();
-            }
+            node.ResetCosts();
         }
     }
 }

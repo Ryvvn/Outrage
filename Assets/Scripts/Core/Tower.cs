@@ -1,4 +1,4 @@
-// Assets/Scripts/Core/Tower.cs
+// Scripts/Core/Tower.cs
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,33 +10,36 @@ public class Tower : MonoBehaviour
     public float baseRange = 5f;
     public float baseAttackSpeed = 1f; // Attacks per second
 
-    [Header("Live Stats")]
     private float currentDamage;
     private float currentRange;
     private float currentAttackSpeed;
 
     [Header("Targeting")]
     private Transform currentTarget;
-    private float attackCooldown = 0f;
+    private float attackCooldown;
+    private List<HealthSystem> enemiesInRange = new List<HealthSystem>();
 
-    // A list of modifications this specific tower has received.
     private List<UpgradeData> appliedModifications = new List<UpgradeData>();
     private TowerManager towerManager;
+    private CircleCollider2D rangeCollider;
 
     void Awake()
     {
-        // Add a sphere collider to act as the range trigger
-        var rangeCollider = gameObject.AddComponent<SphereCollider>();
+        // Add required components programmatically.
+        if (GetComponent<Rigidbody2D>() == null)
+        {
+            var rb = gameObject.AddComponent<Rigidbody2D>();
+            rb.isKinematic = true; // Prevents the tower from being moved by physics.
+        }
+
+        rangeCollider = gameObject.AddComponent<CircleCollider2D>();
         rangeCollider.isTrigger = true;
-        rangeCollider.radius = baseRange;
     }
 
     void Start()
     {
-        // Initialize current stats with base values.
-        currentDamage = baseDamage;
-        currentRange = baseRange;
-        currentAttackSpeed = baseAttackSpeed;
+        // Initialize stats and register with the manager.
+        RecalculateStats();
 
         towerManager = FindObjectOfType<TowerManager>();
         if (towerManager != null)
@@ -61,17 +64,19 @@ public class Tower : MonoBehaviour
     {
         attackCooldown -= Time.deltaTime;
 
-        // If we have a target, check if it's still valid
-        if (currentTarget != null && Vector3.Distance(transform.position, currentTarget.position) > currentRange)
+        // Validate the current target.
+        if (currentTarget != null && !IsTargetValid(currentTarget.GetComponent<HealthSystem>()))
         {
-            currentTarget = null; // Target is out of range
+            currentTarget = null;
         }
 
-        if (currentTarget == null)
+        // If we have no target, find a new one from the enemies in range.
+        if (currentTarget == null && enemiesInRange.Count > 0)
         {
             FindNewTarget();
         }
 
+        // If we have a valid target and are ready to attack, fire.
         if (currentTarget != null && attackCooldown <= 0f)
         {
             Attack();
@@ -79,29 +84,71 @@ public class Tower : MonoBehaviour
         }
     }
 
+    // Efficiently add enemies to the list when they enter the tower's range.
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Enemy"))
+        {
+            HealthSystem enemyHealth = other.GetComponent<HealthSystem>();
+            if (enemyHealth != null && !enemiesInRange.Contains(enemyHealth))
+            {
+                enemiesInRange.Add(enemyHealth);
+            }
+        }
+    }
+
+    // Efficiently remove enemies from the list when they leave the tower's range.
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.CompareTag("Enemy"))
+        {
+            HealthSystem enemyHealth = other.GetComponent<HealthSystem>();
+            if (enemyHealth != null)
+            {
+                enemiesInRange.Remove(enemyHealth);
+            }
+        }
+    }
+
     private void FindNewTarget()
     {
-        // Find all colliders within range on the "Enemy" layer
-        Collider2D[] enemiesInRange = Physics2D.OverlapCircleAll(transform.position, currentRange, LayerMask.GetMask("Enemy"));
-        if (enemiesInRange.Length > 0)
+        // Remove any dead or invalid enemies from the list before searching.
+        enemiesInRange.RemoveAll(enemy => enemy == null || enemy.CurrentHealth <= 0);
+
+        // Find the closest valid enemy.
+        Transform closestEnemy = null;
+        float minDistance = float.MaxValue;
+
+        foreach (var enemyHealth in enemiesInRange)
         {
-            currentTarget = enemiesInRange[0].transform; // Target the first one found
+            float distance = Vector3.Distance(transform.position, enemyHealth.transform.position);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                closestEnemy = enemyHealth.transform;
+            }
         }
+        currentTarget = closestEnemy;
+    }
+
+    private bool IsTargetValid(HealthSystem target)
+    {
+        return target != null && target.CurrentHealth > 0;
     }
 
     void Attack()
     {
         if (currentTarget == null) return;
 
-        EnemyHealth targetHealth = currentTarget.GetComponent<EnemyHealth>();
+        HealthSystem targetHealth = currentTarget.GetComponent<HealthSystem>();
         if (targetHealth != null)
         {
-            targetHealth.TakeDamage(currentDamage);
-            Debug.DrawLine(transform.position, currentTarget.position, Color.yellow, 0.1f);
+            Debug.DrawLine(transform.position, currentTarget.position, Color.red, 0.1f);
+            targetHealth.TakeDamage((int)currentDamage);
         }
         else
         {
-            // The target might have been destroyed by another tower
+            // Target might have been destroyed by another source.
             currentTarget = null;
         }
     }
@@ -112,13 +159,11 @@ public class Tower : MonoBehaviour
 
         appliedModifications.Add(upgrade);
         RecalculateStats();
-
-        Debug.Log($"Applied {upgrade.upgradeName} to {gameObject.name}. New Stats: Dmg={currentDamage}, Rng={currentRange}, Spd={currentAttackSpeed}");
     }
 
     private void RecalculateStats()
     {
-        // Reset to base before reapplying all mods
+        // Reset to base before reapplying all modifications.
         currentDamage = baseDamage;
         currentRange = baseRange;
         currentAttackSpeed = baseAttackSpeed;
@@ -131,8 +176,11 @@ public class Tower : MonoBehaviour
             }
         }
 
-        // Update the trigger collider radius
-        GetComponent<SphereCollider>().radius = currentRange;
+        // Update the trigger collider radius with the new range.
+        if (rangeCollider != null)
+        {
+            rangeCollider.radius = currentRange;
+        }
     }
 
     private void ApplyStat(StatModification statMod)
@@ -140,13 +188,13 @@ public class Tower : MonoBehaviour
         switch (statMod.statName.ToLower())
         {
             case "damage":
-                currentDamage += statMod.isPercentage ? baseDamage * statMod.value : statMod.value;
+                currentDamage += statMod.isPercentage ? baseDamage * (statMod.value / 100f) : statMod.value;
                 break;
             case "range":
-                currentRange += statMod.isPercentage ? baseRange * statMod.value : statMod.value;
+                currentRange += statMod.isPercentage ? baseRange * (statMod.value / 100f) : statMod.value;
                 break;
             case "attackspeed":
-                currentAttackSpeed += statMod.isPercentage ? baseAttackSpeed * statMod.value : statMod.value;
+                currentAttackSpeed += statMod.isPercentage ? baseAttackSpeed * (statMod.value / 100f) : statMod.value;
                 break;
             default:
                 Debug.LogWarning($"Unknown stat modification: {statMod.statName}");
@@ -154,7 +202,6 @@ public class Tower : MonoBehaviour
         }
     }
 
-    // Visualize range in editor
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.cyan;

@@ -20,7 +20,7 @@ public class ExpansionOption : ScriptableObject
     // This field holds the dynamically generated chunk data.
     // It's not serialized, as it only exists at runtime during the expansion phase.
     [System.NonSerialized]
-    public ProceduralExpansionChunk proceduralChunk;
+    //public ProceduralExpansionChunk proceduralChunk;
 
     [Header("Balancing Modifiers")]
     [Tooltip("Expected multiplier for path length (1.0 = no change, 1.4 = 40% longer).")]

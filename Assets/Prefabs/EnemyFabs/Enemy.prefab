@@ -10,15 +10,14 @@ GameObject:
   m_Component:
   - component: {fileID: 5676305567880058378}
   - component: {fileID: 1599609781723277844}
-  - component: {fileID: 7975691736573649657}
   - component: {fileID: 5772554661259373767}
-  - component: {fileID: 3684164551267976397}
   - component: {fileID: 1719078940973404977}
   - component: {fileID: 5129093897603637309}
   - component: {fileID: 6694440695454020230}
-  m_Layer: 0
+  - component: {fileID: 5442767208937192088}
+  m_Layer: 8
   m_Name: Enemy
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -90,19 +89,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!114 &7975691736573649657
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5392447496895250924}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7968573d7e86d34458abd476736f4f95, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  speed: 2
 --- !u!114 &5772554661259373767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -116,18 +102,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHealth: 100
---- !u!114 &3684164551267976397
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5392447496895250924}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b28a9f64c3840844a114c1592e10054, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  damageCooldown: 0.1
+  bloodEffectPrefab: {fileID: 5152144841582187698, guid: f014a86942ff76c469c6c3574733b0f8, type: 3}
 --- !u!50 &1719078940973404977
 Rigidbody2D:
   serializedVersion: 4
@@ -184,7 +160,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
   m_Offset: {x: 0.10466963, y: -0.044858456}
@@ -212,4 +188,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 149e447ba1ffda4428d38aa7ee6f017d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyData: {fileID: 0}
+  enemyData: {fileID: 11400000, guid: 21990f1566f574f459900d9a34f85f47, type: 2}
+--- !u!114 &5442767208937192088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5392447496895250924}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f816fce5ceedc9e4c939117fb8c3b6c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  BaseCore: {fileID: 0}
+  spawnRingRadius: 10
+  moveSpeed: 2
+  attackRange: 1.5
+  attackCooldown: 1
+  attackDamage: 25
+  bountyValue: 10
+  healthBarPrefab: {fileID: 1520950981616228385, guid: eb73ab1acd32a904e9f274ddc98e27a2, type: 3}
+  knockbackForce: 5
+  knockbackTorque: 2
+  healthBarOffset: {x: 0, y: 0.5, z: 0}

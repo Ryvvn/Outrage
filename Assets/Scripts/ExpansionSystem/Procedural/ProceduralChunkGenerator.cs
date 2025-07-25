@@ -1,282 +1,225 @@
-﻿// Scripts/ExpansionSystem/Procedural/ProceduralChunkGenerator.cs
+﻿// Assets/Scripts/ExpansionSystem/Procedural/ProceduralChunkGenerator.cs
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using System.Collections;
 using System.Collections.Generic;
-using Unity.Jobs;
-using Unity.Collections;
-using Unity.Burst;
+using System.Linq;
 
-/// <summary>
-/// Central orchestrator for creating procedural map chunks.
-/// </summary>
 public class ProceduralChunkGenerator : MonoBehaviour
 {
     public static ProceduralChunkGenerator Instance { get; private set; }
 
+    [Header("Chunk Settings")]
+    public Vector2Int chunkSize = new Vector2Int(32, 32);
+    public Vector3 cellSize => gridManager != null ? gridManager.CellSize : Vector3.one;
+
     [Header("Generation Settings")]
-    [Tooltip("The standard size for a generated chunk.")]
-    public Vector2Int standardChunkSize = new Vector2Int(16, 16);
-    [Tooltip("A global seed for the entire run for deterministic results. 0 means random.")]
-    public int globalSeed;
+    public int globalSeed = 12345;
+    public int playerStartClearanceRadius = 10;
 
-    [Header("Validation Settings")]
-    [Tooltip("How many times to try generating a chunk before falling back to a simpler one.")]
-    public int maxGenerationAttempts = 5;
-    [Tooltip("The minimum number of buildable tiles required for a chunk to be valid.")]
-    public int requiredBuildableSpaces = 10;
+    private System.Random pseudoRandom;
+    private GridManager gridManager;
+    private Pathfinder pathfinder;
 
-    private TerrainGenerator terrainGenerator;
-    private PathGenerator pathGenerator;
-    private ObstacleGenerator obstacleGenerator;
-
-    void Awake()
+    private void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);
         else Instance = this;
 
-        terrainGenerator = new TerrainGenerator();
-        pathGenerator = new PathGenerator();
-        obstacleGenerator = new ObstacleGenerator();
-
-        if (globalSeed == 0)
+        gridManager = GridManager.Instance;
+        if (gridManager == null)
         {
-            globalSeed = Random.Range(1, 999999);
+            Debug.LogError("ProceduralChunkGenerator requires a GridManager in the scene!");
+        }
+
+        pathfinder = Pathfinder.Instance;
+        if (pathfinder == null)
+        {
+            Debug.LogError("ProceduralChunkGenerator requires a Pathfinder in the scene!");
         }
     }
 
-    /// <summary>
-    /// Generates a procedural chunk based on the given rules, with retries and a fallback.
-    /// </summary>
-    public ProceduralExpansionChunk GenerateChunk(BiomeGenerationRules rules, List<Vector2Int> existingConnectionPoints, int expansionIndex)
+    public IEnumerator GenerateChunkCoroutine(ChunkAddress addr, BiomeGenerationRules rules, System.Action<GameObject> callback)
     {
-        int chunkSeed = globalSeed + expansionIndex;
+        GameObject chunkRoot = new GameObject($"Chunk_{addr.x}_{addr.y}");
+        int chunkSeed = globalSeed + (addr.x * 1000) + addr.y;
+        pseudoRandom = new System.Random(chunkSeed);
+        Grid grid = chunkRoot.AddComponent<Grid>();
+        grid.cellSize = this.cellSize;
 
-        for (int attempt = 0; attempt < maxGenerationAttempts; attempt++)
+        float chunkWorldWidth = chunkSize.x * cellSize.x;
+        float chunkWorldHeight = chunkSize.y * cellSize.y;
+
+        Vector3 worldOrigin = gridManager.transform.position;
+        chunkRoot.transform.position = worldOrigin + new Vector3(addr.x * chunkWorldWidth, addr.y * chunkWorldHeight, 0);
+
+        Tilemap backgroundTilemap = CreateTilemap(chunkRoot, "Tilemap_Base", "Background", 0);
+        Tilemap pathTilemap = CreateTilemap(chunkRoot, "Tilemap_Path", "Paths", 0);
+        Tilemap obstacleTilemap = CreateTilemap(chunkRoot, "Tilemap_Obstacle", "Obstacles", 0);
+
+        var tilemapCollider = obstacleTilemap.gameObject.AddComponent<TilemapCollider2D>();
+        tilemapCollider.usedByComposite = true;
+        obstacleTilemap.gameObject.layer = LayerMask.NameToLayer("Obstacles");
+
+        var rb = obstacleTilemap.gameObject.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Static;
+        var composite = obstacleTilemap.gameObject.AddComponent<CompositeCollider2D>();
+        composite.geometryType = CompositeCollider2D.GeometryType.Polygons;
+
+        GenerateNoiseAndBaseTiles(chunkRoot.transform, backgroundTilemap, rules);
+        yield return null;
+
+        GenerateObstacles(chunkRoot.transform, obstacleTilemap, rules);
+        yield return null;
+
+        GeneratePaths(chunkRoot.transform, pathTilemap, obstacleTilemap, rules);
+        yield return null;
+
+        GenerateResources(chunkRoot.transform, rules);
+
+        callback(chunkRoot);
+    }
+
+    private void GeneratePaths(Transform chunkTransform, Tilemap pathTilemap, Tilemap obstacleTilemap, BiomeGenerationRules rules)
+    {
+        if (pathfinder == null || rules.tilePalette.pathTiles.Length == 0) return;
+
+        Vector3 left = chunkTransform.position + new Vector3(0, (chunkSize.y * cellSize.y) / 2f, 0);
+        Vector3 right = chunkTransform.position + new Vector3(chunkSize.x * cellSize.x, (chunkSize.y * cellSize.y) / 2f, 0);
+        Vector3 bottom = chunkTransform.position + new Vector3((chunkSize.x * cellSize.x) / 2f, 0, 0);
+        Vector3 top = chunkTransform.position + new Vector3((chunkSize.x * cellSize.x) / 2f, chunkSize.y * cellSize.y, 0);
+
+        // --- MODIFIED ---
+        // Call FindPath with ignoreWalkability set to true.
+        List<Vector3> pathHorizontal = pathfinder.FindPath(left, right, true);
+        List<Vector3> pathVertical = pathfinder.FindPath(bottom, top, true);
+        // --- END MODIFICATION ---
+
+        HashSet<Vector3Int> pathPositions = new HashSet<Vector3Int>();
+
+        if (pathHorizontal != null)
         {
-            var chunk = GenerateChunkAttempt(rules, existingConnectionPoints, chunkSeed + attempt);
-            if (ValidateChunk(chunk))
+            foreach (var worldPos in pathHorizontal)
             {
-                Debug.Log($"Chunk '{rules.biomeName}' generated successfully on attempt {attempt + 1}.");
-                return chunk;
+                pathPositions.Add(pathTilemap.WorldToCell(worldPos));
             }
         }
+        else { Debug.LogError($"Could not generate horizontal path for chunk at {chunkTransform.position}"); }
 
-        Debug.LogWarning($"Failed to generate a valid chunk for '{rules.biomeName}' after {maxGenerationAttempts} attempts. Generating fallback chunk.");
-        return GenerateFallbackChunk(rules, existingConnectionPoints, chunkSeed);
-    }
-
-    private ProceduralExpansionChunk GenerateChunkAttempt(BiomeGenerationRules rules, List<Vector2Int> connectionPoints, int seed)
-    {
-        var chunk = new ProceduralExpansionChunk
+        if (pathVertical != null)
         {
-            chunkName = rules.biomeName,
-            chunkSize = standardChunkSize,
-            biomeRules = rules,
-            connectionPoints = new List<Vector2Int> { new Vector2Int(0, standardChunkSize.y / 2) }
-        };
-
-        int arraySize = chunk.chunkSize.x * chunk.chunkSize.y;
-        chunk.generatedBackgroundTileData = new TileBase[arraySize];
-        chunk.generatedObstacleTileData = new TileBase[arraySize];
-
-        terrainGenerator.GenerateBaseTerrain(chunk, seed);
-        var pathData = pathGenerator.GeneratePathNetwork(chunk, connectionPoints, seed);
-        obstacleGenerator.PlaceObstacles(chunk, pathData, seed);
-        CalculateBuildableAreas(chunk);
-
-        return chunk;
-    }
-
-    private bool ValidateChunk(ProceduralExpansionChunk chunk)
-    {
-        if (chunk.generatedBuildableAreas.Count < requiredBuildableSpaces)
-        {
-            return false;
-        }
-        return true;
-    }
-
-    private void CalculateBuildableAreas(ProceduralExpansionChunk chunk)
-    {
-        chunk.generatedBuildableAreas.Clear();
-        for (int y = 0; y < chunk.chunkSize.y; y++)
-        {
-            for (int x = 0; x < chunk.chunkSize.x; x++)
+            foreach (var worldPos in pathVertical)
             {
-                int index = y * chunk.chunkSize.x + x;
-                if (chunk.generatedBackgroundTileData[index] != null && chunk.generatedObstacleTileData[index] == null)
+                pathPositions.Add(pathTilemap.WorldToCell(worldPos));
+            }
+        }
+        else { Debug.LogError($"Could not generate vertical path for chunk at {chunkTransform.position}"); }
+
+
+        foreach (var tilePos in pathPositions)
+        {
+            pathTilemap.SetTile(tilePos, rules.tilePalette.pathTiles[0]);
+            if (obstacleTilemap.HasTile(tilePos))
+            {
+                obstacleTilemap.SetTile(tilePos, null);
+            }
+            gridManager.UpdateNodeWalkability(pathTilemap.GetCellCenterWorld(tilePos), true);
+        }
+    }
+
+    private void GenerateNoiseAndBaseTiles(Transform chunkTransform, Tilemap tilemap, BiomeGenerationRules rules)
+    {
+        if (rules.tilePalette.backgroundTiles.Length == 0) return;
+
+        for (int y = 0; y < chunkSize.y; y++)
+        {
+            for (int x = 0; x < chunkSize.x; x++)
+            {
+                Vector3Int tilePos = new Vector3Int(x, y, 0);
+                tilemap.SetTile(tilePos, rules.tilePalette.backgroundTiles[0]);
+                gridManager.UpdateNodeWalkability(tilemap.GetCellCenterWorld(tilePos), true);
+            }
+        }
+    }
+
+    private void GenerateObstacles(Transform chunkTransform, Tilemap tilemap, BiomeGenerationRules rules)
+    {
+        if (rules.tilePalette.obstacleTiles.Length == 0) return;
+
+        float offsetX = pseudoRandom.Next(0, 10000) + rules.noiseOffset.x;
+        float offsetY = pseudoRandom.Next(0, 10000) + rules.noiseOffset.y;
+
+        for (int y = 0; y < chunkSize.y; y++)
+        {
+            for (int x = 0; x < chunkSize.x; x++)
+            {
+                Vector3Int tilePos = new Vector3Int(x, y, 0);
+                Vector3 worldPos = tilemap.GetCellCenterWorld(tilePos);
+
+                if (Vector3.Distance(worldPos, Vector3.zero) < playerStartClearanceRadius) continue;
+
+                float noiseValue = Mathf.PerlinNoise(
+                    (worldPos.x) * rules.noiseScale + offsetX,
+                    (worldPos.y) * rules.noiseScale + offsetY
+                );
+
+                if (noiseValue < rules.obstacleDensity)
                 {
-                    chunk.generatedBuildableAreas.Add(new Vector2Int(x, y));
+                    tilemap.SetTile(tilePos, rules.tilePalette.obstacleTiles[0]);
+                    gridManager.UpdateNodeWalkability(worldPos, false);
                 }
             }
         }
     }
 
-    private ProceduralExpansionChunk GenerateFallbackChunk(BiomeGenerationRules rules, List<Vector2Int> connectionPoints, int seed)
+    private void GenerateResources(Transform chunkTransform, BiomeGenerationRules rules)
     {
-        var chunk = new ProceduralExpansionChunk
-        {
-            chunkName = $"{rules.biomeName} (Fallback)",
-            chunkSize = standardChunkSize,
-            biomeRules = rules,
-            connectionPoints = new List<Vector2Int> { new Vector2Int(0, standardChunkSize.y / 2) }
-        };
+        if (ObjectPooler.Instance == null) return;
+        int resourcesToPlace = Mathf.FloorToInt(chunkSize.x * chunkSize.y * rules.resourceDensity);
 
-        int arraySize = chunk.chunkSize.x * chunk.chunkSize.y;
-        chunk.generatedBackgroundTileData = new TileBase[arraySize];
-        chunk.generatedObstacleTileData = new TileBase[arraySize];
-
-        if (rules.tilePalette.backgroundTiles.Length > 0)
+        for (int i = 0; i < resourcesToPlace; i++)
         {
-            TileBase backgroundTile = rules.tilePalette.backgroundTiles[0];
-            for (int i = 0; i < arraySize; i++)
+            int x = pseudoRandom.Next(0, chunkSize.x);
+            int y = pseudoRandom.Next(0, chunkSize.y);
+
+            Vector3 worldPos = chunkTransform.TransformPoint(new Vector3(x * cellSize.x, y * cellSize.y, 0));
+
+            if (Vector3.Distance(worldPos, Vector3.zero) < playerStartClearanceRadius) continue;
+
+            PathNode node = gridManager.GetNodeFromWorldPoint(worldPos);
+            if (node == null || !node.isWalkable) continue;
+
+            ResourceType chosenType = ChooseResourceType(rules.resourceSet);
+            if (chosenType != null && chosenType.prefab != null)
             {
-                chunk.generatedBackgroundTileData[i] = backgroundTile;
+                ObjectPooler.Instance.SpawnFromPool(chosenType.prefab.tag, worldPos, Quaternion.identity);
+                gridManager.UpdateNodeWalkability(worldPos, false);
             }
         }
+    }
 
-        CalculateBuildableAreas(chunk);
-        return chunk;
+    private Tilemap CreateTilemap(GameObject parent, string name, string sortingLayer, int order)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent.transform, false);
+        Tilemap tilemap = go.AddComponent<Tilemap>();
+        TilemapRenderer renderer = go.AddComponent<TilemapRenderer>();
+        renderer.sortingLayerName = sortingLayer;
+        renderer.sortingOrder = order;
+        return tilemap;
+    }
+
+    private ResourceType ChooseResourceType(List<ResourceType> resourceSet)
+    {
+        if (resourceSet == null || resourceSet.Count == 0) return null;
+        float totalDensity = resourceSet.Sum(r => r.density);
+        if (totalDensity == 0) return null;
+        float randomPoint = (float)pseudoRandom.NextDouble() * totalDensity;
+        foreach (var resource in resourceSet)
+        {
+            if (randomPoint < resource.density) return resource;
+            randomPoint -= resource.density;
+        }
+        return resourceSet[0];
     }
 }
-
-#region Sub-Generators
-
-/// <summary>
-/// A job-based terrain generator that uses Perlin noise.
-/// </summary>
-public class TerrainGenerator
-{
-    // A job for calculating Perlin noise in parallel.
-    [BurstCompile]
-    private struct GenerateNoiseJob : IJobParallelFor
-    {
-        [ReadOnly] public int width;
-        [ReadOnly] public float scale;
-        [ReadOnly] public float offsetX;
-        [ReadOnly] public float offsetY;
-
-        [WriteOnly] public NativeArray<float> noiseMap;
-
-        public void Execute(int index)
-        {
-            int x = index % width;
-            int y = index / width;
-
-            float sampleX = (float)x / width * scale + offsetX;
-            float sampleY = (float)y / width * scale + offsetY;
-
-            noiseMap[index] = Mathf.PerlinNoise(sampleX, sampleY);
-        }
-    }
-
-    public void GenerateBaseTerrain(ProceduralExpansionChunk chunk, int seed)
-    {
-        if (chunk.biomeRules.tilePalette.backgroundTiles.Length == 0) return;
-
-        Random.InitState(seed);
-        float offsetX = Random.value * 1000f;
-        float offsetY = Random.value * 1000f;
-
-        int totalTiles = chunk.chunkSize.x * chunk.chunkSize.y;
-        var noiseMap = new NativeArray<float>(totalTiles, Allocator.TempJob);
-
-        var job = new GenerateNoiseJob
-        {
-            width = chunk.chunkSize.x,
-            scale = chunk.biomeRules.noiseScale,
-            offsetX = offsetX,
-            offsetY = offsetY,
-            noiseMap = noiseMap
-        };
-
-        JobHandle handle = job.Schedule(totalTiles, 64);
-        handle.Complete();
-
-        for (int i = 0; i < totalTiles; i++)
-        {
-            // Simple example: Use noise to pick between the first two background tiles.
-            // A more complex system would use weights and more thresholds.
-            if (noiseMap[i] > chunk.biomeRules.noiseThreshold && chunk.biomeRules.tilePalette.backgroundTiles.Length > 1)
-            {
-                chunk.generatedBackgroundTileData[i] = chunk.biomeRules.tilePalette.backgroundTiles[1];
-            }
-            else
-            {
-                chunk.generatedBackgroundTileData[i] = chunk.biomeRules.tilePalette.backgroundTiles[0];
-            }
-        }
-
-        noiseMap.Dispose();
-    }
-}
-
-public class PathGenerator
-{
-    public List<Vector2Int> GeneratePathNetwork(ProceduralExpansionChunk chunk, List<Vector2Int> connectionPoints, int seed)
-    {
-        var path = new List<Vector2Int>();
-        // Assume first connection point is the entry on the left edge.
-        Vector2Int entry = chunk.connectionPoints[0];
-        Vector2Int exit = new Vector2Int(chunk.chunkSize.x - 1, chunk.chunkSize.y / 2);
-
-        // This is a placeholder for a more complex pathing algorithm (e.g., A*, drunkard's walk).
-        // For now, it creates a simple L-shaped path.
-        Vector2Int current = entry;
-        path.Add(current);
-
-        // Move horizontally
-        while (current.x < exit.x)
-        {
-            current.x++;
-            path.Add(current);
-        }
-
-        // Move vertically
-        while (current.y != exit.y)
-        {
-            if (current.y < exit.y) current.y++;
-            else current.y--;
-            path.Add(current);
-        }
-
-        return path;
-    }
-}
-
-public class ObstacleGenerator
-{
-    public void PlaceObstacles(ProceduralExpansionChunk chunk, List<Vector2Int> pathTiles, int seed)
-    {
-        if (chunk.biomeRules.tilePalette.obstacleTiles.Length == 0) return;
-
-        Random.InitState(seed);
-        var pathSet = new HashSet<Vector2Int>(pathTiles);
-        int obstacleCount = (int)(chunk.chunkSize.x * chunk.chunkSize.y * chunk.biomeRules.obstacleDensity);
-
-        for (int i = 0; i < obstacleCount; i++)
-        {
-            int x = Random.Range(0, chunk.chunkSize.x);
-            int y = Random.Range(0, chunk.chunkSize.y);
-            var pos = new Vector2Int(x, y);
-
-            // Do not place obstacles on path tiles or near connection points.
-            if (pathSet.Contains(pos) || chunk.connectionPoints.Contains(pos))
-            {
-                i--; // Retry this placement.
-                continue;
-            }
-
-            int index = y * chunk.chunkSize.x + x;
-            if (chunk.generatedObstacleTileData[index] == null)
-            {
-                chunk.generatedObstacleTileData[index] = chunk.biomeRules.tilePalette.obstacleTiles[0];
-            }
-            else
-            {
-                i--;
-            }
-        }
-    }
-}
-#endregion

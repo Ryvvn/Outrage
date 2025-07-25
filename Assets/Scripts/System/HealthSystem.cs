@@ -1,4 +1,4 @@
-// Assets/Scripts/System/HealthSystem.cs
+// Scripts/System/HealthSystem.cs
 using UnityEngine;
 using System;
 
@@ -10,11 +10,21 @@ public class HealthSystem : MonoBehaviour
     [Tooltip("The maximum health of this entity.")]
     [SerializeField] private int maxHealth = 100;
 
+    [Tooltip("Minimum time between taking damage instances. Prevents rapid multi-hits.")]
+    [SerializeField] private float damageCooldown = 0.1f;
+
+    [Header("Effects")]
+    [Tooltip("Particle effect to instantiate when damage is taken.")]
+    [SerializeField] private GameObject bloodEffectPrefab;
+
+    // Public event that fires when health changes, passing current and max health.
+    public event Action<float, float> OnHealthChanged;
     // Public event that fires when the entity's health reaches zero.
     public event Action OnDied;
 
     private int currentHealth;
     private bool isDead = false;
+    private float lastDamageTime;
 
     // Public property to access current health safely.
     public int CurrentHealth => currentHealth;
@@ -28,17 +38,30 @@ public class HealthSystem : MonoBehaviour
     {
         currentHealth = maxHealth;
         isDead = false;
+        lastDamageTime = -damageCooldown; // Allow immediate damage on enable.
+        OnHealthChanged?.Invoke(currentHealth, maxHealth); // Update health bar on spawn
     }
 
     /// <summary>
-    /// Reduces the entity's health by a specified amount.
+    /// Reduces the entity's health by a specified amount, respecting the cooldown.
     /// </summary>
     /// <param name="damageAmount">The amount of damage to take.</param>
     public void TakeDamage(int damageAmount)
     {
-        if (isDead) return;
+        // Ignore damage if dead or if the cooldown has not elapsed.
+        if (isDead || Time.time < lastDamageTime + damageCooldown) return;
 
+        lastDamageTime = Time.time;
         currentHealth -= damageAmount;
+
+        // Trigger particle effect
+        if (bloodEffectPrefab != null)
+        {
+            Instantiate(bloodEffectPrefab, transform.position, Quaternion.identity);
+        }
+
+        // Notify listeners that health has changed.
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
         if (currentHealth <= 0)
         {
@@ -61,8 +84,6 @@ public class HealthSystem : MonoBehaviour
     private void Die()
     {
         isDead = true;
-
-        // Broadcast that this entity has died. Other scripts can subscribe to this.
         OnDied?.Invoke();
     }
 }

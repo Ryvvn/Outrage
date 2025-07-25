@@ -18,7 +18,7 @@ MonoBehaviour:
     backgroundTiles:
     - {fileID: 11400000, guid: 831120177b8140f43bfb1744e220a4fc, type: 2}
     obstacleTiles:
-    - {fileID: 11400000, guid: 2c09ca97dad868a4ea0f979675239b18, type: 2}
+    - {fileID: 11400000, guid: 8fb69499ffa84ba42a8c737211550dbb, type: 2}
     pathTiles:
     - {fileID: 11400000, guid: 20d9a6aed3a16a64089888c751f41933, type: 2}
     decorativeTiles:
@@ -27,11 +27,14 @@ MonoBehaviour:
     - {fileID: 11400000, guid: adf466fb4d0ade94e888e485530ffe28, type: 2}
     - {fileID: 11400000, guid: 0e3c223c93d98e044873017132a368b4, type: 2}
     - {fileID: 11400000, guid: 7b26b6928a74ecf4dac6fa5296c4240a, type: 2}
+  noiseScale: 0.1
+  noiseOffset: {x: 0, y: 0}
   obstacleDensity: 0.176
   decorativeDensity: 0.308
+  resourceDensity: 0.05
+  resourceSet:
+  - name: Rock
+    prefab: {fileID: 5915860968574657164, guid: 932a24bba211bb04bae13667b61537f0, type: 3}
+    density: 0.117
   pathPattern: 3
-  obstacleCluster: 1
   pathBranchCount: 1
-  noiseScale: 0.1
-  noiseThreshold: 0.5
-  noiseOffset: {x: 0, y: 0}

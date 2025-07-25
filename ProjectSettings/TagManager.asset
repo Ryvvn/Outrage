@@ -3,7 +3,11 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - BaseCore
+  - Enemy
+  - Resource
+  - Rock
   layers:
   - Default
   - TransparentFX
@@ -14,7 +18,7 @@ TagManager:
   - Land
   - Player
   - Enemy
-  - 
+  - Obstacles
   - 
   - 
   - 
@@ -44,8 +48,14 @@ TagManager:
   - name: Background
     uniqueID: 1275273961
     locked: 0
+  - name: Paths
+    uniqueID: 3252013095
+    locked: 0
   - name: Player
     uniqueID: 3394215429
+    locked: 0
+  - name: Obstacles
+    uniqueID: 2426478203
     locked: 0
   - name: Forground
     uniqueID: 2285260741

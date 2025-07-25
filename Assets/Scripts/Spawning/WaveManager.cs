@@ -1,11 +1,25 @@
-// Assets/Scripts/Core/WaveManager.cs
+// Scripts/Spawning/WaveManager.cs
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System;
 
+/// <summary>
+/// Manages the sequence of enemy waves, including timing and enemy composition.
+/// It no longer handles spawning directly but fires an event to request spawns.
+/// </summary>
 public class WaveManager : MonoBehaviour
 {
+    /// <summary>
+    /// Event fired when the game logic determines an enemy should be spawned.
+    /// The PerimeterSpawnManager subscribes to this.
+    /// </summary>
+    public event Action<EnemyData> OnWaveSpawnRequest;
+
+    /// <summary>
+    /// Event fired when a wave is fully completed (all enemies defeated).
+    /// The GameManager subscribes to this.
+    /// </summary>
     public event Action<int> OnWaveCompleted;
 
     [System.Serializable]
@@ -19,52 +33,52 @@ public class WaveManager : MonoBehaviour
 
     [Header("Wave Configuration")]
     public List<Wave> waves;
-    public Transform spawnPoint; // The starting transform
-    public Transform endPoint;   // The ending transform
 
-    [Header("Dependencies")]
-    public Pathfinder pathfinder; // Reference to the Pathfinder
+    [Header("References")]
+    [Tooltip("The final destination for all enemies.")]
+    public Transform endPoint; // Target for enemies (Base Core)
 
     public int currentWaveIndex { get; private set; } = -1;
     private int enemiesRemainingInWave;
 
+    /// <summary>
+    /// Starts the next wave in the sequence if one is available.
+    /// </summary>
     public void StartNextWave()
     {
+        if (GameManager.Instance.currentState != GameState.Build) return;
+
+        if (currentWaveIndex + 1 >= waves.Count)
+        {
+            Debug.Log("All waves completed.");
+            GameManager.Instance.ChangeState(GameState.Victory);
+            return;
+        }
+
+        GameManager.Instance.StartWave();
         currentWaveIndex++;
         StartCoroutine(SpawnWave(waves[currentWaveIndex]));
     }
 
+    /// <summary>
+    /// Coroutine that handles the spawning logic for a single wave over time.
+    /// </summary>
     private IEnumerator SpawnWave(Wave wave)
     {
         enemiesRemainingInWave = wave.enemyCount;
 
-        // Get the path from the Pathfinder using the start and end points
-        List<PathNode> path = pathfinder.FindPath(spawnPoint.position, endPoint.position);
-
-        if (path == null || path.Count == 0)
-        {
-            Debug.LogError("Cannot start wave: No path found by Pathfinder!");
-            yield break;
-        }
-
         for (int i = 0; i < wave.enemyCount; i++)
         {
-            GameObject enemyGO = Instantiate(wave.enemyData.enemyPrefab, path[0].worldPosition, Quaternion.identity);
+            // Fire the event to request a spawn. Another manager will handle the actual instantiation.
+            OnWaveSpawnRequest?.Invoke(wave.enemyData);
 
-            EnemyMovement enemyMovement = enemyGO.GetComponent<EnemyMovement>();
-            if (enemyMovement != null)
-            {
-                List<Vector3> pathPositions = new List<Vector3>();
-                foreach (PathNode node in path)
-                {
-                    pathPositions.Add(node.worldPosition);
-                }
-                enemyMovement.SetPath(pathPositions);
-            }
             yield return new WaitForSeconds(wave.spawnInterval);
         }
     }
 
+    /// <summary>
+    /// Called by an enemy when it is defeated. Checks for wave completion.
+    /// </summary>
     public void EnemyDefeated()
     {
         enemiesRemainingInWave--;
@@ -74,6 +88,10 @@ public class WaveManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Checks if the current wave is the last one in the list.
+    /// </summary>
+    /// <returns>True if this is the final wave.</returns>
     public bool IsLastWave()
     {
         return currentWaveIndex >= waves.Count - 1;

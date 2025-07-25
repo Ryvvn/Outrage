@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3033d044cfe4ab1438d6e4d7003355b9, type: 3}
   m_Name: Global Damage Boost
   m_EditorClassIdentifier: 
-  upgradeID: 
-  upgradeName: 
-  description: 
+  upgradeID: UP_DMG_GLOBAL_1
+  upgradeName: Global Damage Boost
+  description: Increases the damage of all towers by a small amount.
   icon: {fileID: 21300000, guid: 96f3d9c8fb87f654a8ec2bf36d1247f0, type: 3}
   rarity: 0
   upgradeType: 1

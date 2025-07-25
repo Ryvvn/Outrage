@@ -1,47 +1,54 @@
 // Scripts/Pathfinding/Pathfinder.cs
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 public class Pathfinder : MonoBehaviour
 {
     public static Pathfinder Instance { get; private set; }
-    public List<PathNode> FinalPath { get; private set; }
+
+    private GridManager gridManager;
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
         }
+        else
+        {
+            Instance = this;
+        }
+
+        gridManager = GridManager.Instance;
+        if (gridManager == null)
+        {
+            Debug.LogError("Pathfinder could not find an instance of GridManager!", this);
+        }
     }
 
-    public List<PathNode> FindPath(Vector3 startPos, Vector3 targetPos, Dictionary<PathNode, int> costPenalties = null, float randomFactor = 0f, bool useDijkstra = false)
+    /// <summary>
+    /// Finds a path from a start to a target position.
+    /// </summary>
+    /// <param name="ignoreWalkability">If true, the pathfinder will ignore the isWalkable flag on nodes. Used for level generation.</param>
+    public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, bool ignoreWalkability = false)
     {
-        if (GridManager.Instance == null)
+        if (gridManager == null) return null;
+
+        PathNode startNode = gridManager.GetNodeFromWorldPoint(startPos);
+        PathNode targetNode = gridManager.GetNodeFromWorldPoint(targetPos);
+
+        // Target node must always be valid, but start node might be inside an obstacle before carving.
+        if (startNode == null || targetNode == null)
         {
-            Debug.LogError("GridManager instance not found!");
             return null;
         }
 
-        PathNode startNode = GridManager.Instance.GetNodeFromWorldPoint(startPos);
-        PathNode targetNode = GridManager.Instance.GetNodeFromWorldPoint(targetPos);
-
-        if (startNode == null || targetNode == null || !startNode.isWalkable || !targetNode.isWalkable)
-        {
-            Debug.LogWarning($"Pathfinding: Invalid start or target node. Start walkable: {startNode?.isWalkable}, Target walkable: {targetNode?.isWalkable}.");
-            return null;
-        }
-
-        GridManager.Instance.ResetAllNodeCosts();
+        gridManager.ResetAllNodeCosts();
 
         List<PathNode> openSet = new List<PathNode>();
         HashSet<PathNode> closedSet = new HashSet<PathNode>();
         openSet.Add(startNode);
-
         startNode.gCost = 0;
         startNode.hCost = GetManhattanDistance(startNode, targetNode);
 
@@ -50,7 +57,7 @@ public class Pathfinder : MonoBehaviour
             PathNode currentNode = openSet[0];
             for (int i = 1; i < openSet.Count; i++)
             {
-                if (openSet[i].FCost < currentNode.FCost || (openSet[i].FCost == currentNode.FCost && openSet[i].hCost < currentNode.hCost))
+                if (openSet[i].fCost < currentNode.fCost || (openSet[i].fCost == currentNode.fCost && openSet[i].hCost < currentNode.hCost))
                 {
                     currentNode = openSet[i];
                 }
@@ -61,72 +68,59 @@ public class Pathfinder : MonoBehaviour
 
             if (currentNode == targetNode)
             {
-                FinalPath = RetracePath(startNode, targetNode);
-                return FinalPath;
+                return RetracePath(startNode, targetNode);
             }
 
-            foreach (PathNode neighbour in GridManager.Instance.GetNeighbours(currentNode))
+            foreach (PathNode neighbour in gridManager.GetNeighbours(currentNode))
             {
-                if (!neighbour.isWalkable || closedSet.Contains(neighbour))
+                // --- MODIFIED LINE ---
+                // If we are NOT ignoring walkability, check if the node is unwalkable.
+                // Also, always skip nodes in the closed set.
+                if (!ignoreWalkability && !neighbour.isWalkable || closedSet.Contains(neighbour))
                 {
                     continue;
                 }
+                // --- END MODIFICATION ---
 
-                int newMovementCostToNeighbour = currentNode.gCost + GetManhattanDistance(currentNode, neighbour);
-                if (costPenalties != null && costPenalties.ContainsKey(neighbour))
+                int newCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour);
+                if (newCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
                 {
-                    newMovementCostToNeighbour += costPenalties[neighbour];
-                }
+                    neighbour.gCost = newCostToNeighbour;
+                    neighbour.hCost = GetManhattanDistance(neighbour, targetNode);
+                    neighbour.parent = currentNode;
 
-                if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
-                {
-                    neighbour.gCost = newMovementCostToNeighbour;
-
-                    int hCost = GetManhattanDistance(neighbour, targetNode);
-                    if (useDijkstra)
-                    {
-                        hCost = 0; // A* with hCost=0 is Dijkstra's algorithm
-                    }
-                    else if (randomFactor > 0)
-                    {
-                        hCost = (int)(hCost * (1 + Random.Range(-randomFactor, randomFactor)));
-                    }
-                    neighbour.hCost = hCost;
-
-                    neighbour.parentNode = currentNode;
-
-                    if (!openSet.Contains(neighbour))
-                    {
-                        openSet.Add(neighbour);
-                    }
+                    if (!openSet.Contains(neighbour)) openSet.Add(neighbour);
                 }
             }
         }
 
-        return null; // Path not found
+        return null; // No path found
     }
 
-    List<PathNode> RetracePath(PathNode startNode, PathNode endNode)
+    private List<Vector3> RetracePath(PathNode startNode, PathNode endNode)
     {
         List<PathNode> path = new List<PathNode>();
         PathNode currentNode = endNode;
-
         while (currentNode != startNode)
         {
             path.Add(currentNode);
-            currentNode = currentNode.parentNode;
+            currentNode = currentNode.parent;
         }
-        path.Add(startNode);
         path.Reverse();
-        return path;
+        return path.Select(node => node.worldPosition).ToList();
     }
 
-    public int GetManhattanDistance(PathNode nodeA, PathNode nodeB)
+    private int GetDistance(PathNode nodeA, PathNode nodeB)
     {
         int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
         int dstY = Mathf.Abs(nodeA.gridY - nodeB.gridY);
-        // Standard Manhattan distance for a 4-directional grid.
-        // Cost for straight move is 10.
+        return (dstX > dstY) ? 14 * dstY + 10 * (dstX - dstY) : 14 * dstX + 10 * (dstY - dstX);
+    }
+
+    private int GetManhattanDistance(PathNode nodeA, PathNode nodeB)
+    {
+        int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
+        int dstY = Mathf.Abs(nodeA.gridY - nodeB.gridY);
         return 10 * (dstX + dstY);
     }
 }
