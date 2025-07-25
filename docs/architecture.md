@@ -1,0 +1,121 @@
+# Procedural Tower Defense Architecture Document
+
+## Technical Summary
+
+A Unity 2D client simulates procedural world streaming, game-loop FSM, A* pathfinding, tower combat, and upgrades. A .NET 7 Web API backend (PostgreSQL, Redis) handles player profiles, run analytics, and leaderboards. Hosted on AWS ECS (Fargate), S3, and CloudFront with JWT auth via ASP.NET Identity.
+
+## High-Level Diagram
+
+```mermaid
+graph TD
+  subgraph Client
+    C1[Unity Client] -->|Login/Stats| API[Web API]
+    C1 -->|Upload Run| API
+    C1 -->|Fetch Leaderboard| API
+  end
+  subgraph AWS
+    API -->|SQL Queries| DB[(PostgreSQL)]
+    API -->|Cache| REDIS[(Redis)]
+    API --> S3[S3 Bucket]
+    S3 --> CDN[CloudFront]
+  end
+  Player((Player)) --> C1
+```
+
+## Architectural Patterns
+
+- Client-Server separation for simulation vs persistence
+- Repository pattern for data access in API
+- ECS-inspired Unity patterns via ScriptableObjects
+- Cache-aside pattern with Redis for leaderboard reads
+
+## Tech Stack
+
+| Category | Technology | Version | Purpose | Rationale |
+|----------|------------|---------|---------|----------|
+| Game Engine | Unity | 2022.3.55f1 | Gameplay and rendering | LTS, 2D support, ECS-ready |
+| Client Language | C# | 10+ | Game scripting | Unity standard |
+| API Framework | ASP.NET Core | 7.0 | REST API | High performance, C# ecosystem |
+| Database | PostgreSQL | 15 | Persistence | ACID, relational fit |
+| Cache | Redis | 7.0 | Caching leaderboards & tokens | Low latency |
+| Hosting | AWS ECS (Fargate) | N/A | Containerized API | Scalability, AWS integration |
+| CDN | CloudFront | N/A | Static asset distribution | Global low latency |
+| Auth | JWT (Identity) | N/A | Stateless auth | Scalable |
+| CI/CD | GitHub Actions | N/A | Automated builds & deployments | GitHub integration |
+
+## Data Models
+
+### PlayerProfile
+- id: GUID
+- username: string
+- hashedPassword: string
+- unlockedTowers: List<string>
+- metaProgress: object
+
+### RunSummary
+- runId: GUID
+- playerId: GUID
+- score: int
+- duration: float
+- seed: int
+- waveReached: int
+- timestamp: DateTime
+
+### LeaderboardEntry
+- playerId: GUID
+- bestScore: int
+- lastUpdated: DateTime
+
+## Components
+
+**Unity Client:** GameManager (FSM), WorldStreamer, ProceduralChunkGenerator, WaveManager, TowerManager, ChoiceManager, Pathfinder, CameraManager.
+
+**Auth Service:** LoginController, TokenService.
+
+**Profile Service:** ProfileController, ProfileRepository.
+
+**Run Service:** RunController, RunRepository.
+
+**Leaderboard Service:** LeaderboardController, CacheService.
+
+## Source Tree
+
+```
+project-root/
+├── UnityClient/
+│   ├── Assets/
+│   │   ├── Scripts/
+│   │   ├── ScriptableObjects/
+│   │   └── Scenes/
+│   └── ProjectSettings/
+├── Api/
+│   ├── Controllers/
+│   ├── Models/
+│   ├── Repositories/
+│   ├── Services/
+│   └── Program.cs
+├── Infrastructure/
+│   └── aws/ (Terraform modules)
+├── docs/
+│   ├── prd.md
+│   └── architecture.md
+└── README.md
+```
+
+## Infrastructure & Deployment
+
+- Terraform modules under Infrastructure/aws/ecs
+- GitHub Actions build Docker image, push to ECR, deploy to ECS Fargate
+- Environments: Dev, Staging, Prod
+
+## Error Handling Strategy
+
+**Client:** try/catch around web calls with fallback and logging.
+
+**API:** global exception middleware logging to CloudWatch, standardized error responses.
+
+## Coding Standards
+
+- ScriptableObjects for data, no scene references
+- Use repository pattern for data access in API
+- DTOs for requests/responses; no dynamic SQL

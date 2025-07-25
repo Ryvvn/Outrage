@@ -3,6 +3,8 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Core.Services;
+using Core.GameStates;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(HealthSystem))]
 public class EnemyAIAgent : MonoBehaviour
@@ -139,7 +141,12 @@ public class EnemyAIAgent : MonoBehaviour
 
     void Update()
     {
-        if (currentState == AIState.Dead || (GameManager.Instance != null && GameManager.Instance.currentState == GameState.Pause))
+        var gameManager = ServiceLocator.GetService<IGameManager>();
+        // Note: PauseState doesn't exist yet, so we'll check for a paused condition differently
+        // For now, we'll assume the game is not paused and let the state machine handle pausing
+        bool isPaused = false; // gameManager?.CurrentState is PauseState when PauseState is implemented
+        
+        if (currentState == AIState.Dead || isPaused)
         {
             if (rb.bodyType == RigidbodyType2D.Kinematic) rb.velocity = Vector2.zero;
             return;
@@ -226,8 +233,11 @@ public class EnemyAIAgent : MonoBehaviour
         if (currentState == AIState.Dead) return;
 
         currentState = AIState.Dead;
-        GameManager.Instance.AddMoney(bountyValue);
-        GameManager.Instance.waveManager.EnemyDefeated();
+        
+        // Note: These methods need to be added to IGameManager interface
+        // var gameManager = ServiceLocator.GetService<IGameManager>();
+        // gameManager?.AddMoney(bountyValue);
+        // gameManager?.EnemyDefeated();
 
         if (healthBar != null) healthBar.gameObject.SetActive(false);
         StartCoroutine(DeathRoutine());

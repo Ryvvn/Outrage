@@ -73,3 +73,10 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Bmad
+/.bmad
+/.bmad-2d-unity-game-dev
+/.bmad-core
+/.trae
+/web-bundles

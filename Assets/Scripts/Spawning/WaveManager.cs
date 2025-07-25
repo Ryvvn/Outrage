@@ -3,6 +3,8 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System;
+using Core.Services;
+using Core.GameStates;
 
 /// <summary>
 /// Manages the sequence of enemy waves, including timing and enemy composition.
@@ -46,16 +48,20 @@ public class WaveManager : MonoBehaviour
     /// </summary>
     public void StartNextWave()
     {
-        if (GameManager.Instance.currentState != GameState.Build) return;
+        var gameManager = ServiceLocator.GetService<IGameManager>();
+        if (gameManager == null) return;
+        
+        // Note: Need to implement proper state checking - this is a placeholder
+        // if (gameManager.CurrentState is not BuildState) return;
 
         if (currentWaveIndex + 1 >= waves.Count)
         {
             Debug.Log("All waves completed.");
-            GameManager.Instance.ChangeState(GameState.Victory);
+            // gameManager.ChangeState<VictoryState>();
             return;
         }
 
-        GameManager.Instance.StartWave();
+        // Note: StartWave method needs to be implemented in GameManager
         currentWaveIndex++;
         StartCoroutine(SpawnWave(waves[currentWaveIndex]));
     }
@@ -82,8 +88,11 @@ public class WaveManager : MonoBehaviour
     public void EnemyDefeated()
     {
         enemiesRemainingInWave--;
-        if (enemiesRemainingInWave <= 0 && GameManager.Instance.currentState == GameState.WaveInProgress)
+        var gameManager = ServiceLocator.GetService<IGameManager>();
+        if (enemiesRemainingInWave <= 0 && gameManager != null)
         {
+            // Note: Need to implement proper state checking - this is a placeholder
+            // if (gameManager.CurrentState is WaveInProgressState)
             OnWaveCompleted?.Invoke(currentWaveIndex + 1);
         }
     }

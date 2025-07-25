@@ -2,15 +2,15 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public enum GameState { Build, WaveInProgress, Pause, GameOver, Victory }
+public enum GamePhase { Build, WaveInProgress, Pause, GameOver, Victory }
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
     [Header("Game State")]
-    public GameState currentState;
-    private GameState stateBeforePause;
+    public GamePhase currentState;
+    private GamePhase stateBeforePause;
 
     [Header("Player Stats")]
     public int playerMoney = 100;
@@ -63,7 +63,7 @@ public class GameManager : MonoBehaviour
         }
 
         waveManager.OnWaveCompleted += HandleWaveCompleted;
-        ChangeState(GameState.Build);
+        ChangeState(GamePhase.Build);
     }
 
     // ... (rest of the script is identical)
@@ -79,31 +79,31 @@ public class GameManager : MonoBehaviour
         if (baseHealthSystem != null) baseHealthSystem.OnDied -= HandleGameOver;
     }
 
-    public void ChangeState(GameState newState)
+    public void ChangeState(GamePhase newState)
     {
         if (currentState == newState) return;
         currentState = newState;
         switch (currentState)
         {
-            case GameState.Build:
+            case GamePhase.Build:
                 Time.timeScale = 1f;
                 uiManager.UpdatePlayerStats();
                 uiManager.ShowStartWaveButton(true);
                 uiManager.SetPausePanelActive(false);
                 break;
-            case GameState.WaveInProgress:
+            case GamePhase.WaveInProgress:
                 uiManager.ShowStartWaveButton(false);
                 break;
-            case GameState.Pause:
+            case GamePhase.Pause:
                 stateBeforePause = currentState;
                 Time.timeScale = 0f;
                 uiManager.SetPausePanelActive(true);
                 break;
-            case GameState.GameOver:
+            case GamePhase.GameOver:
                 Time.timeScale = 0f;
                 uiManager.ShowGameOverPanel();
                 break;
-            case GameState.Victory:
+            case GamePhase.Victory:
                 Time.timeScale = 0f;
                 uiManager.ShowVictoryPanel();
                 break;
@@ -112,12 +112,12 @@ public class GameManager : MonoBehaviour
 
     public void TogglePause()
     {
-        if (currentState != GameState.Pause && currentState != GameState.GameOver && currentState != GameState.Victory)
+        if (currentState != GamePhase.Pause && currentState != GamePhase.GameOver && currentState != GamePhase.Victory)
         {
             stateBeforePause = currentState;
-            ChangeState(GameState.Pause);
+            ChangeState(GamePhase.Pause);
         }
-        else if (currentState == GameState.Pause)
+        else if (currentState == GamePhase.Pause)
         {
             ResumeGame();
         }
@@ -125,28 +125,28 @@ public class GameManager : MonoBehaviour
 
     public void ResumeGame()
     {
-        if (currentState == GameState.Pause) ChangeState(stateBeforePause);
+        if (currentState == GamePhase.Pause) ChangeState(stateBeforePause);
     }
 
     public void StartWave()
     {
-        if (currentState == GameState.Build) ChangeState(GameState.WaveInProgress);
+        if (currentState == GamePhase.Build) ChangeState(GamePhase.WaveInProgress);
     }
 
     private void HandleWaveCompleted(int waveNumber)
     {
         if (waveManager.IsLastWave())
         {
-            ChangeState(GameState.Victory);
+            ChangeState(GamePhase.Victory);
             return;
         }
         playerMoney += 100 + (waveNumber * 10);
-        ChangeState(GameState.Build);
+        ChangeState(GamePhase.Build);
     }
 
     private void HandleGameOver()
     {
-        ChangeState(GameState.GameOver);
+        ChangeState(GamePhase.GameOver);
     }
 
     public void AddMoney(int amount)

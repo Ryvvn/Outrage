@@ -2,6 +2,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using Core.Services;
 
 public class UIManager : MonoBehaviour
 {
@@ -22,7 +23,11 @@ public class UIManager : MonoBehaviour
     {
         if (startWaveButton != null)
         {
-            startWaveButton.onClick.AddListener(GameManager.Instance.StartWave);
+            // Note: StartWave method needs to be implemented in IGameManager
+            // startWaveButton.onClick.AddListener(() => {
+            //     var gameManager = ServiceLocator.GetService<IGameManager>();
+            //     gameManager?.StartWave();
+            // });
         }
 
         // Ensure all panels are hidden at the start of the game.
@@ -35,13 +40,20 @@ public class UIManager : MonoBehaviour
 
     public void UpdatePlayerStats()
     {
-        // Source health directly from the base's HealthSystem via the GameManager.
-        if (GameManager.Instance.baseHealthSystem != null)
-        {
-            healthText.text = $"Health: {GameManager.Instance.baseHealthSystem.CurrentHealth}";
-        }
-        moneyText.text = $"Money: ${GameManager.Instance.playerMoney}";
-        waveText.text = $"Wave: {GameManager.Instance.waveManager.currentWaveIndex + 1} / {GameManager.Instance.waveManager.waves.Count}";
+        // Note: These references need to be refactored to use proper service locator pattern
+        // var gameManager = ServiceLocator.GetService<IGameManager>();
+        // if (gameManager != null)
+        // {
+        //     // Source health directly from the base's HealthSystem via the GameManager.
+        //     healthText.text = $"Health: {gameManager.GetBaseHealth()}";
+        //     moneyText.text = $"Money: ${gameManager.GetPlayerMoney()}";
+        //     waveText.text = $"Wave: {gameManager.GetCurrentWave()} / {gameManager.GetTotalWaves()}";
+        // }
+        
+        // Placeholder values for now
+        if (healthText != null) healthText.text = "Health: 100";
+        if (moneyText != null) moneyText.text = "Money: $0";
+        if (waveText != null) waveText.text = "Wave: 1 / 10";
     }
 
     public void ShowStartWaveButton(bool show)

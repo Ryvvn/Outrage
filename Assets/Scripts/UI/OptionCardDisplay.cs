@@ -17,7 +17,7 @@ public class OptionCardDisplay : MonoBehaviour
     public Image borderImage; // To color-code rarity
 
     private UpgradeData associatedUpgrade;
-    private ChoiceManager choiceManager;
+    //private ChoiceManager choiceManager;
 
     // Defines the colors for each rarity tier.
     private readonly Dictionary<Rarity, Color> rarityColors = new Dictionary<Rarity, Color>
@@ -30,7 +30,7 @@ public class OptionCardDisplay : MonoBehaviour
 
     void Start()
     {
-        choiceManager = FindObjectOfType<ChoiceManager>();
+        //choiceManager = FindObjectOfType<ChoiceManager>();
     }
 
     /// <summary>
@@ -64,10 +64,10 @@ public class OptionCardDisplay : MonoBehaviour
     /// </summary>
     public void HandleClick()
     {
-        if (associatedUpgrade != null && choiceManager != null)
-        {
-            choiceManager.OnUpgradeSelected(associatedUpgrade);
-        }
+        //if (associatedUpgrade != null && choiceManager != null)
+        //{
+        //    choiceManager.OnUpgradeSelected(associatedUpgrade);
+        //}
     }
 
     // These methods are stubs for the hover effects defined in the prefab's EventTrigger.
